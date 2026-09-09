@@ -1,56 +1,73 @@
-# 台電自動線路開關充電管理系統
+# SwitchCare Enterprise
 
-GitHub Pages 可直接部署的純前端第一版。
+## 架構
 
-## 核心規則
+GitHub Pages
+→ Supabase Auth
+→ Supabase PostgreSQL
+→ RLS
+→ audit_log 稽核紀錄
 
-- 新品／舊品入帳日起算 6 個月。
-- 到期前 30 天列為「即將到期」。
-- 到期當日列為「待充電」。
-- 到期後列為「逾期」。
-- 開立送充電移撥單後進入「已開單待送」。
-- 登錄實際充電完成日後，下一次充電日 = 完成日 + 6 個月。
-- 每台設備保留完整充電歷史。
-- 開關料號必須為 10 位數字。
-- 台電編號不可重複。
+本版不再使用 LocalStorage 做正式資料保存。
 
-## 功能
+## 業務邏輯
 
-1. 儀表板
-2. 開關資料管理
-3. 充電管理
-4. 充電歷史紀錄
-5. 報表中心
-6. 新增／編輯設備
-7. 30 天預警與逾期管理
-8. 批次登錄送充電
-9. 移撥單號管理
-10. 登錄充電完成
-11. 自動計算下一次充電日
-12. CSV 匯入／匯出
-13. 本機 LocalStorage 儲存
+1. 新品／舊品入帳：入帳日起算6個月。
+2. 在庫：進行6個月充電倒數。
+3. 領用／出庫：停止充電計時，清除next_charge_date；領用期間不列入逾期。
+4. 退庫：視同重新入庫；退庫日＝新的cycle_start_date；下次充電日＝退庫日＋6個月。
+5. 送檢充電：記錄送檢日期與ERP充電移撥單號。
+6. 充電完成：實際完成日＝新的cycle_start_date；下一次充電日＝完成日＋6個月。
+7. audit_log 永久保留建立、修改、領用、退庫、送檢與充電完成等事件。
+8. 不建議刪除設備，正式流程應以「停用」取代刪除。
 
-## GitHub Pages 部署
+## 部署
 
-1. 建立新的 GitHub Repository。
-2. 將 `index.html`、`style.css`、`app.js`、`.nojekyll`、`README.md` 放在 Repository 根目錄。
-3. GitHub → Settings → Pages。
-4. Source 選擇 Deploy from a branch。
-5. Branch 選 `main`，資料夾選 `/ (root)`。
-6. 儲存後等待 Pages 發布。
+### 1. 建立 Supabase Project
+取得 Project URL 與 anon/public key。
 
-## CSV 匯入格式
+### 2. 執行資料庫
+打開 Supabase SQL Editor，執行 `database/schema.sql`。
 
-第一列欄位依序為：
+### 3. 設定前端
+編輯 `config.js`：
 
-`料號,型式,台電編號,評價類型,倉庫,儲位,入帳日期`
+window.SWITCHCARE_CONFIG = {
+  SUPABASE_URL: "你的Project URL",
+  SUPABASE_ANON_KEY: "你的anon/public key",
+  COMPANY_NAME: "台電",
+  CYCLE_MONTHS: 6,
+  REMIND_DAYS: 30
+};
 
-例如：
+**禁止放 service_role key。**
 
-`1102050209,地下四路自動線路開關（24KV 600A 2S2F）,A1460480,新品,21M1,A-01,2026-03-10`
+### 4. 建立登入帳號
+Supabase Authentication → Users → 建立使用者。
 
-## 目前版本定位
+### 5. GitHub Pages
+把專案檔放 Repository 根目錄：
+- index.html
+- app.js
+- style.css
+- config.js
+- database/
+- README.md
+- .nojekyll
 
-這是可直接放到 GitHub Pages 的第一版原型。資料目前儲存在瀏覽器 LocalStorage，因此不同電腦／不同瀏覽器不會自動同步。
+Settings → Pages → Deploy from a branch → main → / (root)。
 
-正式企業版下一階段建議加入：登入與權限、真正資料庫、操作稽核紀錄、多人同步、Excel/XLSX 匯入、ERP/SAP 匯出檔比對、附件上傳、通知機制，以及與既有材料管理系統整合。
+## 永久保存注意
+
+「永久」在工程上應理解為長期、可備份、可復原，而不是宇宙意義的絕對永久。
+
+正式企業環境應另外設定：
+- 自動備份／Point-in-Time Recovery
+- 第二份異地備份
+- 權限分層
+- MFA
+- 操作稽核
+- 資料保留政策
+- 災難復原演練
+
+Supabase 免費層級與公司正式環境的備份／保留能力不同，正式使用前應依公司資安規範選擇方案。
