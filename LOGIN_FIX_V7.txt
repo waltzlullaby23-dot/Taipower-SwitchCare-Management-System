@@ -1,0 +1,12 @@
+v7 登入修正說明
+症狀：
+Failed to execute 'fetch' on 'Window': Failed to read the 'headers' property from 'RequestInit': String contains non ISO-8859-1 code point.
+
+處理：
+1. 移除前端對 supabase-js Auth 的依賴。
+2. 改用 Supabase Auth REST endpoint /auth/v1/token?grant_type=password。
+3. 明確控制所有 request headers，僅使用 ASCII/Latin-1。
+4. 之後資料操作使用 /rest/v1/ 與 /rest/v1/rpc/。
+5. cache bust 改為 v7。
+
+若 v7 仍出現相同錯誤，則問題高度可能不是 SwitchCare 程式碼，而是瀏覽器擴充套件、企業代理/網路層或其他注入 HTTP header 的元件；此時用 Chrome 無痕模式測試最容易隔離。

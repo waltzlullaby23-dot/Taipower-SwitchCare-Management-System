@@ -1,30 +1,19 @@
-# SwitchCare Enterprise v6
+# SwitchCare Enterprise v7
+本版針對 `Failed to execute 'fetch' ... headers ... non ISO-8859-1 code point` 重新處理。
 
-本版針對登入與資料庫連線流程重新完整整理。
+## 核心修正
+- 不再依賴 supabase-js 的登入 fetch；改用直接 Supabase Auth REST API。
+- 所有自建 request headers 強制 ASCII/Latin-1。
+- Project URL 固定為目前確認的 `https://nmqnhzhqjwlbywqsaiwt.supabase.co`。
+- 使用 `sb_publishable_...`。
+- GitHub Pages 使用 `?v=7` 避免舊 JavaScript 快取。
+- 登入後直接以 access_token 查詢 PostgREST。
+- 保留領用停止計時、退庫重新起算6個月、送檢、充電完成、Audit Log。
 
-## 重要修正
-- 完整補回所有頁面渲染函式，不再有 `renderLayout is not defined` / `stateOf is not defined` 類型錯誤。
-- 使用 Supabase Publishable Key。
-- 若 Key 被誤貼成 `sb_publishable_sb_publishable_...`，前端會自動矯正一次。
-- 登入成功後若資料庫查詢失敗，會直接顯示錯誤原因。
-- GitHub Pages 使用 `?v=6` 避免舊 JavaScript 快取。
-- 新增／領用／退庫／送檢／充電完成均有明確錯誤顯示。
-- 新增設備儲存按鈕會顯示「儲存中…」，避免重複送出。
-- RLS 與 authenticated Data API GRANT 已納入 schema.sql。
-
-## config.js
-填入：
-- SUPABASE_URL
-- SUPABASE_PUBLISHABLE_KEY
-
-只使用 `sb_publishable_...`，不要使用 `sb_secret_...` 或 service_role。
-
-## 首次部署
-1. Supabase SQL Editor 重新執行 `database/schema.sql`。
-2. Authentication → Users 確認登入帳號存在。
-3. GitHub 上傳本專案並覆蓋舊檔。
-4. `config.js` 填入你的 Supabase URL 與 Publishable Key。
-5. GitHub Pages 重新部署。
-6. Ctrl+F5。
-7. 登入。
-8. Settings → 測試資料庫連線。
+## 部署
+1. GitHub 用本版覆蓋舊 `index.html / app.js / style.css / config.js / README.md`。
+2. `database/schema.sql` 整份重新在 Supabase SQL Editor 執行一次。
+3. `config.js` 將 `SUPABASE_PUBLISHABLE_KEY` 換成你的完整 `sb_publishable_...`。
+4. GitHub Pages 等待部署後 Ctrl+F5。
+5. 登入。
+6. Settings → 測試資料庫。
