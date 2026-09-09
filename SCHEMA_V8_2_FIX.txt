@@ -1,0 +1,24 @@
+# SwitchCare v8.2 SQL 修正
+
+你目前看到的錯誤：
+
+ERROR: 2BP01: cannot drop function touch_updated_at() because other objects depend on it
+DETAIL: trigger trg_switches_touch on table switches depends on function touch_updated_at()
+
+原因：
+v8.1 為了修正 Function parameter defaults，會先 DROP touch_updated_at()，
+但你的資料庫舊版 Trigger 名稱是 `trg_switches_touch`，因此仍依賴該 Function。
+
+v8.2 的處理方式：
+1. 先 DROP 舊 Trigger（包含 `trg_switches_touch`、`trg_switches_updated` 等）。
+2. `touch_updated_at()` 不再 DROP，而直接 CREATE OR REPLACE。
+3. 需要改變 defaults 的業務 Functions，改用 PostgreSQL catalog 動態取得 identity arguments 後 DROP。
+4. 再重新建立 Functions。
+5. 重建必要 Triggers。
+6. 保留所有資料表與既有資料。
+7. 建立 charge_records / usage_records / audit_log。
+8. 重新套用 RLS / GRANT。
+9. 重新執行安全的舊資料充電週期回填。
+
+請把 v8.2 的 `database/schema.sql` 全文貼到 Supabase SQL Editor，按 Run。
+不要把 v8.1 舊 SQL 與 v8.2 混在一起。

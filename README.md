@@ -1,4 +1,4 @@
-# SwitchCare Enterprise v8
+# SwitchCare Enterprise v8.3.3.1
 
 ## 本版目標
 
@@ -22,7 +22,7 @@
 7. 所有領用、退庫、送檢、充電完成都有 Audit Log。
 8. 一般使用者不應直接刪除設備；正式流程以「停用」保留完整歷史。
 
-## v8 主要修正
+## v8.3.3 主要修正
 
 - 統一 JavaScript 變數命名，避免 `CYCLE` / `CYCLE_MONTHS` 混用。
 - 登入改用直接 Supabase REST Auth，避免先前瀏覽器 `fetch headers` 編碼問題。
@@ -59,7 +59,7 @@ window.SWITCHCARE_CONFIG = {
   COMPANY_NAME: "台電",
   CYCLE_MONTHS: 6,
   REMIND_DAYS: 30,
-  SESSION_STORAGE_KEY: "switchcare_session_v8"
+  SESSION_STORAGE_KEY: "switchcare_session_v8.3.3"
 };
 ```
 
@@ -118,18 +118,3 @@ PostgreSQL + transaction records + Audit Log 是長期保存的資料架構，�
 ## 重要
 
 若舊版資料庫已經有資料，重新執行 schema 時不會刪除 `switches` 既有資料；但正式上線前仍建議先做一次完整資料庫備份。
-
-
-## 本次發版檢查
-本版已進行：
-- JavaScript `node --check` 語法檢查
-- 舊變數名稱混用檢查
-- Supabase RPC 對應檢查
-- schema 中 switches / charge_records / usage_records / audit_log 檢查
-- GitHub Pages cache-busting 檢查
-
-注意：靜態檢查不能取代你實際瀏覽器與 Supabase Project 的整合測試；上線後應依「測試順序」逐項驗證。
-
-
-## Key naming
-v8 only uses `SUPABASE_PUBLISHABLE_KEY`; the older `SUPABASE_ANON_KEY` variable has been removed from the application.

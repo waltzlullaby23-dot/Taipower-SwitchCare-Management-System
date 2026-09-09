@@ -1,0 +1,16 @@
+v8.3 FINAL migration
+
+這次修正了前兩次 SQL migration 的核心問題。
+
+已知問題：
+1. 舊版有 trg_switches_touch 依賴 touch_updated_at()
+2. 舊版 audit_switch() 尚存，CREATE 時出現 42723
+3. function defaults 改變會出現 42P13
+
+v8.3：
+- 不猜 trigger 名稱，直接從 pg_catalog 找出依賴 touch_updated_at / audit_switch 的舊 trigger 後先移除。
+- 從 pg_catalog 取得所有同名 application function 的 identity arguments，再逐一 DROP。
+- helper functions 在 trigger 移除後使用 CREATE OR REPLACE。
+- 重建 triggers/functions/RLS/GRANT。
+- 不 DROP 四個資料表，不刪既有資料。
+- 充電週期、領用/退庫與 audit log 分離。

@@ -1,0 +1,18 @@
+# v8.1 schema fix
+
+前一版執行 SQL 時，PostgreSQL 回報：
+ERROR 42P13: cannot remove parameter defaults from existing function
+HINT: DROP FUNCTION send_switch_for_charge(uuid,date,text,text) first.
+
+原因：PostgreSQL 對既有 function 的 parameter defaults 不允許以 CREATE OR REPLACE FUNCTION 任意改變。
+
+v8.1 已處理：
+1. 先 DROP 所有本系統 business functions 的 exact signatures。
+2. 再重新 CREATE。
+3. 保留既有 tables / data，不刪除 switches。
+4. 對舊 schema 補欄位。
+5. RLS / GRANT 重新整理。
+6. charge_records / usage_records / audit_log 正式分離。
+7. 交易函式仍維持 6 個月、領用停止、退庫重算、送檢、充電完成邏輯。
+
+因此這份 schema 可以安全作為目前正式版本的資料庫建置／修復腳本。
