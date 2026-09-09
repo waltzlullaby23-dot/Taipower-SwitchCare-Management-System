@@ -1,11 +1,8 @@
 /*
- * SwitchCare Enterprise 設定
+ * SwitchCare Enterprise configuration.
  *
- * 正式環境請填入 Supabase Project 的：
- * 1. Project URL
- * 2. anon/public key
- *
- * NEVER put service_role key in this file or GitHub.
+ * Put only the Supabase Project URL and anon/public key here.
+ * NEVER put service_role or other secret keys in this file.
  */
 window.SWITCHCARE_CONFIG = {
   SUPABASE_URL: "",

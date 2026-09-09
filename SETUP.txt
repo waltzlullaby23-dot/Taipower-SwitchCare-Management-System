@@ -1,0 +1,20 @@
+SwitchCare Enterprise v4 建置步驟
+
+1. Supabase 建立 Project
+2. SQL Editor 執行 database/schema.sql
+3. Authentication -> Users -> 建立登入帳號
+4. 從 Project Settings / API 取得 Project URL 與 anon public key
+5. 編輯 config.js：
+
+window.SWITCHCARE_CONFIG = {
+  SUPABASE_URL: "https://你的專案.supabase.co",
+  SUPABASE_ANON_KEY: "你的anonpublickey",
+  COMPANY_NAME: "台電",
+  CYCLE_MONTHS: 6,
+  REMIND_DAYS: 30
+};
+
+6. 上傳 index.html、app.js、style.css、config.js、database/schema.sql、README.md 到GitHub
+7. GitHub Pages部署
+8. 開啟網站 -> 登入 -> 新增設備 -> 儲存
+9. 再測試：領用 -> 退庫 -> 送檢 -> 完成充電 -> 查看生命週期
