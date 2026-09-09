@@ -1,8 +1,13 @@
 const CFG=window.SWITCHCARE_CONFIG||{};
 const CYCLE=Number(CFG.CYCLE_MONTHS||6);
 const REMIND=Number(CFG.REMIND_DAYS||30);
-const HAS_DB=!!(CFG.SUPABASE_URL&&CFG.SUPABASE_ANON_KEY&&window.supabase);
-const DB=HAS_DB?window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY):null;
+const RAW_KEY=String(CFG.SUPABASE_PUBLISHABLE_KEY||CFG.SUPABASE_ANON_KEY||"").trim();
+/* Be defensive if an earlier setup accidentally pasted the publishable prefix twice. */
+const CLEAN_KEY=RAW_KEY.replace(/^sb_publishable_sb_publishable_/,"sb_publishable_");
+const HAS_DB=!!(CFG.SUPABASE_URL&&CLEAN_KEY&&window.supabase);
+const DB=HAS_DB?window.supabase.createClient(CFG.SUPABASE_URL,CLEAN_KEY,{
+  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+}):null;
 let page="dashboard",devices=[],session=null,auditRows=[];
 
 const today=()=>new Date().toISOString().slice(0,10);
@@ -14,62 +19,56 @@ function requireReady(){if(!HAS_DB)return "尚未連接 Supabase。請先設定 
 
 async function boot(){
   if(!HAS_DB){renderSetup();return}
-  const result=await DB.auth.getSession();
-  if(result.error){renderAuthError(result.error.message);return}
-  session=result.data.session;
+  const {data,error}=await DB.auth.getSession();
+  if(error){renderAuthError("讀取登入狀態失敗："+error.message);return}
+  session=data.session;
   if(!session){renderLogin();return}
-  DB.auth.onAuthStateChange((_event,s)=>{session=s});
   renderLayout();
   await refresh();
 }
 async function signIn(){
-  const email=document.getElementById("loginEmail").value.trim(),password=document.getElementById("loginPassword").value,err=document.getElementById("loginError");
-  if(!email||!password){err.textContent="請輸入Email與密碼。";err.style.display="block";return}
-  const {data,error}=await DB.auth.signInWithPassword({email,password});
-  if(error){err.textContent="登入失敗："+error.message;err.style.display="block";return}
-  session=data.session;renderLayout();await refresh();
+  const email=document.getElementById("loginEmail").value.trim();
+  const password=document.getElementById("loginPassword").value;
+  const err=document.getElementById("loginError");
+  const btn=document.getElementById("loginBtn");
+  err.style.display="none";
+  if(!email||!password){showLoginError("請輸入 Email 與密碼。");return}
+  btn.disabled=true;btn.textContent="登入中…";
+  try{
+    const {data,error}=await DB.auth.signInWithPassword({email,password});
+    if(error){
+      showLoginError("登入失敗："+error.message);
+      return;
+    }
+    if(!data?.session){
+      showLoginError("Supabase 沒有回傳有效 Session。請確認帳號與密碼設定。");
+      return;
+    }
+    session=data.session;
+    renderLayout();
+    await refresh();
+  }catch(e){
+    console.error(e);
+    showLoginError("登入程式發生錯誤："+(e?.message||e));
+  }finally{
+    if(document.getElementById("loginBtn")){document.getElementById("loginBtn").disabled=false;document.getElementById("loginBtn").textContent="登入系統";}
+  }
+}
+function showLoginError(msg){
+  const e=document.getElementById("loginError");
+  if(e){e.textContent=msg;e.style.display="block";}
 }
 async function signOut(){await DB.auth.signOut();session=null;renderLogin()}
-function renderSetup(){document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card"><h1>SWITCHCARE</h1><div class="sub">台電自動線路開關生命週期管理系統</div><div class="notice warning"><b>尚未設定正式資料庫</b><br>目前故意不顯示可儲存的設備表單，避免使用者輸入後才發現資料無法寫入。</div><p class="muted">請在 GitHub 的 config.js 填入 Supabase Project URL 與 anon/public key，並執行 database/schema.sql。</p></div></div>`}
+function renderSetup(){document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card"><h1>SWITCHCARE</h1><div class="sub">台電自動線路開關生命週期管理系統</div><div class="notice warning"><b>尚未設定正式資料庫</b><br>目前故意不顯示可儲存的設備表單，避免使用者輸入後才發現資料無法寫入。</div><p class="muted">請在 GitHub 的 config.js 填入 Supabase Project URL 與 Publishable Key (sb_publishable_...)，並執行 database/schema.sql。</p></div></div>`}
 function renderAuthError(msg){document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card"><h1>SWITCHCARE</h1><div class="sub">資料庫連線設定異常</div><div class="auth-error" style="display:block">${esc(msg)}</div><p class="muted">請檢查 config.js 與 Supabase 設定。</p></div></div>`}
-function renderLogin(){document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card"><h1>SWITCHCARE</h1><div class="sub">台電自動線路開關生命週期管理系統</div><label>Email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="your@email.com"><label>密碼</label><input id="loginPassword" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()"><div id="loginError" class="auth-error" style="display:none"></div><button class="btn" onclick="signIn()">登入系統</button></div></div>`}
-function nav(p,t){return `<button class="${page===p?"active":""}" onclick="go('${p}')">${t}</button>`}
-function title(){return {dashboard:"充電管理總覽",switches:"開關設備主檔",charging:"充電與週期管理",usage:"領用／退庫管理",history:"生命週期紀錄",reports:"報表與稽核",settings:"系統設定"}[page]}
-function renderLayout(){document.getElementById("app").innerHTML=`<div class="app"><aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>企業版｜資料庫・稽核・生命週期</small></div><nav class="nav">${nav("dashboard","儀表板")}${nav("switches","開關設備主檔")}${nav("charging","充電與週期管理")}${nav("usage","領用／退庫管理")}${nav("history","生命週期紀錄")}${nav("reports","報表與稽核")}${nav("settings","系統設定")}</nav></aside><main class="main"><div class="topbar"><div><h1>${title()}</h1><span class="muted">在庫計時・領用停止・退庫重新起算6個月</span></div><div class="top-actions">${page!=="settings"?`<button class="btn" onclick="openDevice()">＋ 新增開關</button>`:""}<span class="user-email">${esc(session?.user?.email||"")}</span><button class="btn secondary small" onclick="signOut()">登出</button></div></div><div id="content"></div></main></div>`}
-function go(p){page=p;renderLayout();render()}
-function stateOf(x){if(x.state==="領用中")return{label:"領用中",cls:"gray",days:null};if(x.state==="送檢充電")return{label:"送檢充電",cls:"info",days:null};if(x.state==="充電中")return{label:"充電中",cls:"info",days:null};if(!x.next_charge_date)return{label:"待建週期",cls:"gray",days:null};const d=diffDays(today(),x.next_charge_date);return d<0?{label:"逾期",cls:"danger",days:d}:d<=REMIND?{label:"即將到期",cls:"warning",days:d}:{label:"正常",cls:"normal",days:d}}
-async function refresh(){try{const {data,error}=await DB.from("switches").select("*").order("taipower_no");if(error)throw error;devices=data||[];render()}catch(e){document.getElementById("content").innerHTML=`<div class="panel"><div class="notice danger">資料庫查詢失敗：${esc(e.message)}</div></div>`}}
-function card(t,n,c=""){return `<div class="card ${c}"><div class="label">${t}</div><div class="num">${n}</div></div>`}
-function table(list,showDays=false){return `<div class="table-wrap"><table><thead><tr><th>料號</th><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>單號</th><th>操作</th></tr></thead><tbody>${list.map(x=>{const s=stateOf(x);return `<tr><td>${esc(x.material_no)}</td><td>${esc(x.taipower_no)}</td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(x.cycle_start_date)}</td><td>${fmt(x.next_charge_date)}${showDays&&s.days!==null?`<br><span class="muted">${s.days<0?"逾期 "+Math.abs(s.days)+" 天":"剩 "+s.days+" 天"}</span>`:""}</td><td>${esc(x.transfer_no||x.issue_no||"-")}</td><td><button class="btn small secondary" onclick="detail('${x.id}')">查看</button></td></tr>`}).join("")}</tbody></table></div>`}
-function render(){if(!document.getElementById("content"))return;switch(page){case"dashboard":dashboard();break;case"switches":switches();break;case"charging":charging();break;case"usage":usage();break;case"history":historyPage();break;case"reports":reports();break;case"settings":settings();break}}
-function dashboard(){const stock=devices.filter(x=>x.state!=="領用中"),issued=devices.filter(x=>x.state==="領用中"),soon=stock.filter(x=>stateOf(x).label==="即將到期"),over=stock.filter(x=>stateOf(x).label==="逾期"),proc=devices.filter(x=>["送檢充電","充電中"].includes(x.state));document.getElementById("content").innerHTML=`<div class="cards">${card("設備總數",devices.length)}${card("目前在庫",stock.length,"success")}${card("領用中",issued.length)}${card("30天內到期",soon.length,"warning")}${card("逾期",over.length,"danger")}${card("送檢／充電",proc.length,"info")}</div><div class="panel"><h2>核心業務規則</h2><div class="notice">在庫才計算6個月週期；領用停止計時；退庫視同重新入庫，退庫日重新起算6個月；充電完成後再起算6個月。</div></div><div class="panel"><h2>逾期設備</h2>${over.length?table(over,true):'<div class="empty">目前沒有逾期設備</div>'}</div>`}
-function switches(){document.getElementById("content").innerHTML=`<div class="panel"><div class="toolbar"><input id="sq" placeholder="搜尋料號／台電編號／型式／單號" oninput="filterDevices()"><select id="ss" onchange="filterDevices()"><option value="">全部狀態</option><option>正常</option><option>即將到期</option><option>逾期</option><option>領用中</option><option>送檢充電</option><option>充電中</option></select><button class="btn secondary" onclick="openDevice()">新增</button><button class="btn secondary" onclick="exportCSV()">匯出CSV</button></div><div id="dt">${table(devices)}</div></div>`}
-function filterDevices(){const q=(document.getElementById("sq").value||"").toLowerCase(),s=document.getElementById("ss").value;document.getElementById("dt").innerHTML=table(devices.filter(x=>(!q||[x.material_no,x.taipower_no,x.type,x.issue_no,x.transfer_no].join(" ").toLowerCase().includes(q))&&(!s||stateOf(x).label===s)))}
-function charging(){const list=devices.filter(x=>x.state!=="領用中"&&["即將到期","逾期","送檢充電","充電中"].includes(stateOf(x).label));document.getElementById("content").innerHTML=`<div class="notice">領用中的開關不需要紀錄充電，也不進行6個月倒數。退庫後才重新建立充電週期。</div><div class="panel"><div class="toolbar"><button class="btn" onclick="batchSend()">批次送檢</button></div>${list.length?table(list,true):'<div class="empty">目前沒有需要處理的設備</div>'}</div>`}
-function usage(){const issued=devices.filter(x=>x.state==="領用中"),stock=devices.filter(x=>x.state!=="領用中");document.getElementById("content").innerHTML=`<div class="notice">領用後停止充電計時；退庫後視同重新入庫，退庫日是新的週期起算日。</div><div class="panel"><h2>目前領用中（${issued.length}）</h2>${issued.length?table(issued):'<div class="empty">目前沒有領用中的設備</div>'}</div><div class="panel"><div class="toolbar"><button class="btn" onclick="openUsage('issue',${JSON.stringify(stock.map(x=>x.id))})">領用／出庫</button><button class="btn success" onclick="openUsage('return',${JSON.stringify(issued.map(x=>x.id))})">退庫／重新入庫</button></div></div>`}
-function historyPage(){document.getElementById("content").innerHTML=`<div class="panel"><div class="toolbar"><input id="hq" placeholder="搜尋設備／事件／單號" oninput="filterHistory()"></div><div id="ht"><div class="empty">載入中...</div></div></div>`;loadHistory()}
-async function loadHistory(){const {data,error}=await DB.from("audit_log").select("*").order("event_at",{ascending:false}).limit(500);if(error){document.getElementById("ht").innerHTML=`<div class="notice danger">${esc(error.message)}</div>`;return}auditRows=data||[];renderHistoryRows(auditRows)}
-function historyTable(rows){return `<div class="table-wrap"><table><thead><tr><th>時間</th><th>事件</th><th>台電編號</th><th>料號</th><th>單號</th><th>操作者</th><th>說明</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${new Date(r.event_at).toLocaleString("zh-TW")}</td><td>${esc(r.event_type)}</td><td>${esc(r.taipower_no||"-")}</td><td>${esc(r.material_no||"-")}</td><td>${esc(r.document_no||"-")}</td><td>${esc(r.actor_email||"system")}</td><td>${esc(r.note||"")}</td></tr>`).join("")}</tbody></table></div>`}
-function renderHistoryRows(rows){document.getElementById("ht").innerHTML=rows.length?historyTable(rows):'<div class="empty">沒有歷史紀錄</div>'}
-function filterHistory(){const q=(document.getElementById("hq").value||"").toLowerCase();renderHistoryRows(auditRows.filter(r=>[r.event_type,r.taipower_no,r.material_no,r.document_no,r.actor_email,r.note].join(" ").toLowerCase().includes(q)))}
-function reports(){const stock=devices.filter(x=>x.state!=="領用中"),over=stock.filter(x=>stateOf(x).label==="逾期"),soon=stock.filter(x=>stateOf(x).label==="即將到期"),issued=devices.filter(x=>x.state==="領用中");document.getElementById("content").innerHTML=`<div class="panel"><h2>報表</h2><div class="toolbar"><button class="btn" onclick="report('overdue')">逾期清冊</button><button class="btn secondary" onclick="report('soon')">30天到期清冊</button><button class="btn secondary" onclick="report('issued')">領用中清冊</button><button class="btn secondary" onclick="exportCSV()">設備主檔</button></div><p class="muted">在庫 ${stock.length}；逾期 ${over.length}；30天內到期 ${soon.length}；領用中 ${issued.length}。</p></div>`}
-function settings(){document.getElementById("content").innerHTML=`<div class="panel"><h2>資料庫連線</h2><p class="${HAS_DB?"db-ok":"db-bad"}"><b>${HAS_DB?"已設定 Supabase":"尚未設定 Supabase"}</b></p><div class="settings">${esc(CFG.SUPABASE_URL||"(空白)")}</div><p class="muted">前端只允許 anon/public key；不可放 service_role key。</p></div><div class="panel"><h2>資料保存</h2><p>設備主檔保存於 PostgreSQL；生命週期事件保存於 audit_log；一般使用者不能直接刪除主檔。</p></div>`}
-function openDevice(x=null){const v=x||{material_no:"",type:"",taipower_no:"",rating_type:"新品",warehouse:"",location:"",entry_date:today(),remark:""};document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>${x?"編輯":"新增"}設備</h2><button class="close" type="button" onclick="closeModal()">×</button></div><div class="form form-grid"><div><label>開關料號（10位）*</label><input id="fm" maxlength="10" inputmode="numeric" value="${esc(v.material_no)}"></div><div><label>台電編號 *</label><input id="ft" value="${esc(v.taipower_no)}"></div><div class="full"><label>型式 *</label><input id="fy" value="${esc(v.type)}"></div><div><label>評價類型</label><select id="fr"><option ${v.rating_type==="新品"?"selected":""}>新品</option><option ${v.rating_type==="舊品"?"selected":""}>舊品</option></select></div><div><label>入帳日期 *</label><input id="fe" type="date" value="${v.entry_date||today()}"></div><div><label>倉庫</label><input id="fw" value="${esc(v.warehouse||"")}"></div><div><label>儲位</label><input id="fl" value="${esc(v.location||"")}"></div><div class="full"><label>備註</label><textarea id="fn">${esc(v.remark||"")}</textarea></div></div><div id="saveMessage" class="notice" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button id="saveDeviceBtn" class="btn" type="button" onclick="saveDevice('${x?.id||""}')">儲存</button></div></div></div>`) }
-async function saveDevice(id){
-  const message=document.getElementById("saveMessage"),button=document.getElementById("saveDeviceBtn");
-  const ready=requireReady();if(ready){message.className="notice warning";message.textContent=ready;message.style.display="block";return}
-  const m=document.getElementById("fm").value.trim(),t=document.getElementById("ft").value.trim(),type=document.getElementById("fy").value.trim(),e=document.getElementById("fe").value;
-  if(!/^\d{10}$/.test(m)){message.className="notice danger";message.textContent="開關料號必須為10位數字。";message.style.display="block";return}
-  if(!t||!type||!e){message.className="notice danger";message.textContent="請完整填寫帶 * 欄位。";message.style.display="block";return}
-  button.disabled=true;button.textContent="儲存中…";message.style.display="none";
-  try{
-    const row={material_no:m,taipower_no:t,type,rating_type:document.getElementById("fr").value,warehouse:document.getElementById("fw").value.trim(),location:document.getElementById("fl").value.trim(),entry_date:e,remark:document.getElementById("fn").value.trim()};
-    let result;
-    if(id){result=await DB.from("switches").update(row).eq("id",id).select().single()}
-    else{row.state="在庫";row.cycle_start_date=e;row.next_charge_date=addMonths(e,CYCLE);result=await DB.from("switches").insert(row).select().single()}
-    if(result.error)throw result.error;
-    closeModal();await refresh();
-  }catch(e){message.className="notice danger";message.textContent="儲存失敗："+e.message;message.style.display="block";button.disabled=false;button.textContent="儲存"}
+function renderLogin(){
+  document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card">
+    <h1>SWITCHCARE</h1><div class="sub">台電自動線路開關生命週期管理系統</div>
+    <label>Email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="your@email.com">
+    <label>密碼</label><input id="loginPassword" type="password" autocomplete="current-password" onkeydown="if(event.key==="Enter")signIn()">
+    <div id="loginError" class="auth-error" style="display:none"></div>
+    <button id="loginBtn" class="btn" type="button" onclick="signIn()">登入系統</button>
+  </div></div>`;
 }
 function closeModal(){document.getElementById("modal")?.remove()}
 function openUsage(mode,ids){if(!ids.length)return alert("沒有可操作的設備。");const list=ids.map(id=>devices.find(x=>x.id===id)).filter(Boolean);document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>${mode==="issue"?"領用／出庫":"退庫／重新入庫"}</h2><button class="close" type="button" onclick="closeModal()">×</button></div><div class="form-grid"><div class="full"><label>設備</label><select id="uid">${list.map(x=>`<option value="${x.id}">${esc(x.taipower_no)}｜${esc(x.material_no)}｜${esc(x.type)}</option>`).join("")}</select></div><div><label>${mode==="issue"?"領用日期":"退庫日期"} *</label><input id="ud" type="date" value="${today()}"></div><div><label>單號</label><input id="un"></div><div class="full"><label>備註</label><textarea id="unote"></textarea></div></div><div class="notice ${mode==="return"?"warning":""}">${mode==="issue"?"領用後立即停止6個月充電倒數。":"退庫後視同重新入庫，從退庫日重新起算6個月。"}</div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn ${mode==="return"?"success":""}" type="button" onclick="saveUsage('${mode}')">確認</button></div></div></div>`) }
@@ -85,4 +84,5 @@ function download(head,rows,name){const q=v=>`"${String(v??"").replace(/"/g,'""'
 function batchSend(){const list=devices.filter(x=>["逾期","即將到期"].includes(stateOf(x).label));if(!list.length)return alert("目前沒有可送檢設備。");document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>批次送檢</h2><button class="close" onclick="closeModal()">×</button></div><div class="form-grid"><div><label>送檢日期</label><input id="bd" type="date" value="${today()}"></div></div>${table(list,true)}<div class="page-actions"><button class="btn secondary" onclick="closeModal()">取消</button><button class="btn" onclick="batchSave(${JSON.stringify(list.map(x=>x.id))})">確認</button></div></div></div>`)}
 async function batchSave(ids){const d=document.getElementById("bd").value;if(!d)return alert("日期不可空白。");for(const id of ids){const {error}=await DB.rpc("send_switch_for_charge",{p_switch_id:id,p_event_date:d,p_transfer_no:null,p_note:"批次送檢"});if(error)return alert(error.message)}closeModal();await refresh()}
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});document.addEventListener("click",e=>{if(e.target?.id==="modal")closeModal()});
+if(DB){DB.auth.onAuthStateChange((_event,s)=>{session=s})}
 boot();

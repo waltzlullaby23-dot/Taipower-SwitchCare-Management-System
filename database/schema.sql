@@ -140,3 +140,19 @@ grant execute on function public.issue_switch(uuid,date,text,text) to authentica
 grant execute on function public.return_switch(uuid,date,text,text) to authenticated;
 grant execute on function public.send_switch_for_charge(uuid,date,text,text) to authenticated;
 grant execute on function public.complete_switch_charge(uuid,date,text,text) to authenticated;
+
+
+-- Data API / PostgREST permissions required by the browser client.
+-- RLS still controls WHICH rows can be accessed.
+grant usage on schema public to authenticated;
+grant select, insert, update on public.switches to authenticated;
+grant select on public.audit_log to authenticated;
+
+grant execute on function public.issue_switch(uuid,date,text,text) to authenticated;
+grant execute on function public.return_switch(uuid,date,text,text) to authenticated;
+grant execute on function public.send_switch_for_charge(uuid,date,text,text) to authenticated;
+grant execute on function public.complete_switch_charge(uuid,date,text,text) to authenticated;
+
+-- Do not allow direct deletes from the client.
+revoke delete on public.switches from authenticated;
+revoke delete on public.audit_log from authenticated;

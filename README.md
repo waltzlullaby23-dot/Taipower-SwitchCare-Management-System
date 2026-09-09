@@ -38,3 +38,12 @@ v4 改成：
 ## 正式長期保存
 
 PostgreSQL 提供正式資料庫保存；正式企業環境仍須另外啟用自動備份、PITR／復原能力、第二份備份、MFA、權限分層、災難復原與公司資安核准流程。
+
+
+## v5 修正
+- 新版登入錯誤會直接顯示。
+- 支援 Supabase Publishable Key。
+- 防止 publishable prefix 重複輸入造成登入異常。
+- 補足 authenticated 的 Data API GRANT。
+- GitHub Pages 加入 cache bust，避免舊 app.js 被快取。
+- 登入成功但資料庫查詢失敗時會顯示明確的 RLS/權限診斷。
