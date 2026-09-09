@@ -1,4 +1,4 @@
-# SwitchCare Enterprise v8.3.3.1
+# SwitchCare Enterprise v10.2.3.1
 
 ## 本版目標
 
@@ -22,7 +22,7 @@
 7. 所有領用、退庫、送檢、充電完成都有 Audit Log。
 8. 一般使用者不應直接刪除設備；正式流程以「停用」保留完整歷史。
 
-## v8.3.3 主要修正
+## v10.2.3 主要修正
 
 - 統一 JavaScript 變數命名，避免 `CYCLE` / `CYCLE_MONTHS` 混用。
 - 登入改用直接 Supabase REST Auth，避免先前瀏覽器 `fetch headers` 編碼問題。
@@ -59,7 +59,7 @@ window.SWITCHCARE_CONFIG = {
   COMPANY_NAME: "台電",
   CYCLE_MONTHS: 6,
   REMIND_DAYS: 30,
-  SESSION_STORAGE_KEY: "switchcare_session_v8.3.3"
+  SESSION_STORAGE_KEY: "switchcare_session_v10.2.3"
 };
 ```
 

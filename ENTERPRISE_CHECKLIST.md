@@ -1,4 +1,4 @@
-# SwitchCare Enterprise v8.3.3 - release checklist
+# SwitchCare Enterprise v10.2.3 - release checklist
 
 ## Functional
 - [x] Authentication REST login

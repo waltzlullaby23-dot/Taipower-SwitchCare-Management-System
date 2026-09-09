@@ -1,0 +1,20 @@
+SwitchCare v9 FINAL
+
+本版針對目前「Supabase 設定未完成／Key 格式錯誤」問題做最後一次前端整理。
+
+已處理：
+1. index.html → ?v=9，避免瀏覽器使用舊 app.js/config.js。
+2. config.js 使用目前正確 Project URL。
+3. Publishable Key 可接受 BOM、前後空白、引號與重複前綴。
+4. Session storage key 更新為 v9。
+5. 設定檢查同時支援新版 Publishable Key 與舊欄位名稱。
+
+部署：
+- 覆蓋 index.html、app.js、style.css、config.js、README.md
+- config.js 填入目前 Project 的完整 sb_publishable_...
+- database/schema.sql 只要前一版已成功執行，就不必因這次前端設定問題重新執行
+- GitHub Pages 完成部署後 Ctrl+F5
+
+如果仍顯示「設定未完成」，請先直接打開 GitHub Pages 網址後的：
+/config.js?v=9
+確認瀏覽器實際取得的是新版 config.js。

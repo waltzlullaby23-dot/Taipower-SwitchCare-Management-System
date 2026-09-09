@@ -1,4 +1,4 @@
-# SwitchCare v8.3.3 修正摘要
+# SwitchCare v9.3 修正摘要
 
 這版不再沿用前幾版逐筆補丁的做法。
 
@@ -38,16 +38,16 @@
 
 ## 如果 GitHub 仍顯示舊版本
 
-1. 確認 Repository 中的 `index.html`、`app.js`、`style.css`、`config.js` 都是 v8.3.3。
+1. 確認 Repository 中的 `index.html`、`app.js`、`style.css`、`config.js` 都是 v9.3。
 2. 等 Actions / Pages deployment 完成。
 3. Chrome Ctrl+F5。
 4. 必要時開無痕視窗測試。
 
-## 如果 v8.3.3 登入成功但資料查詢失敗
+## 如果 v9.3 登入成功但資料查詢失敗
 
 請到 SwitchCare → 系統設定 → 測試資料庫。
 畫面會直接顯示 API 錯誤。
 
 ## 如果新增仍失敗
 
-v8.3.3 不會只顯示「儲存失敗」，而會把 PostgreSQL / PostgREST 回傳的訊息顯示在表單內。
+v9.3 不會只顯示「儲存失敗」，而會把 PostgreSQL / PostgREST 回傳的訊息顯示在表單內。

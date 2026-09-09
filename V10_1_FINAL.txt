@@ -1,0 +1,5 @@
+SwitchCare v10.1 FINAL
+
+修正：新增設備表單「儲位」欄位 HTML 引號錯誤。該錯誤會把後續 HTML 片段插入 input value，造成畫面出現 `></div><div class...`。
+
+同時保留 v10 的資料庫 permission 修正：business RPC 使用 SECURITY DEFINER，authenticated 只保留 SELECT + RPC EXECUTE，直接 DML 仍撤銷。

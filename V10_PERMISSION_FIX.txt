@@ -1,0 +1,18 @@
+# SwitchCare v10.2 FINAL
+
+使用者目前遇到：
+`permission denied for table switches`
+
+根本原因：
+前版把 authenticated 對 switches/charge_records/usage_records 的 INSERT/UPDATE/DELETE 撤銷了，但 browser 呼叫的 RPC 是 SECURITY INVOKER，因此 RPC 內部仍以 authenticated 身分執行寫入，被 PostgreSQL 拒絕。
+
+v10.2：
+1. 所有業務寫入 RPC 改為 SECURITY DEFINER。
+2. RPC 內部設定 search_path=public。
+3. 前端仍沒有直接寫入業務表的權限。
+4. authenticated 只保留 SELECT + RPC EXECUTE。
+5. 仍保留 RLS。
+6. 新增設備、編輯、領用、退庫、送檢、充電完成維持同一交易內處理。
+7. `charge_records` / `usage_records` / `audit_log` 保留永久履歷架構。
+8. 不 DROP TABLE，不刪除既有設備資料。
+9. 同時清除舊版 Trigger 相依，並重新建立觸發器。

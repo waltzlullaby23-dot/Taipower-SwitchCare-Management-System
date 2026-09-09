@@ -8,13 +8,16 @@
    - All business mutations use RPC functions
 */
 const CFG = window.SWITCHCARE_CONFIG || {};
-const SUPABASE_URL = String(CFG.SUPABASE_URL || "").trim().replace(/\/+$/, "");
-const RAW_KEY = String(CFG.SUPABASE_PUBLISHABLE_KEY || "").trim();
-const SUPABASE_KEY = RAW_KEY.replace(/^sb_publishable_sb_publishable_/, "sb_publishable_");
+const cleanText = v => String(v ?? "").replace(/^\uFEFF/, "").trim();
+const SUPABASE_URL = cleanText(CFG.SUPABASE_URL).replace(/\/+$/, "");
+let SUPABASE_KEY = cleanText(CFG.SUPABASE_PUBLISHABLE_KEY || CFG.SUPABASE_ANON_KEY);
+SUPABASE_KEY = SUPABASE_KEY.replace(/^["']|["']$/g, "");
+SUPABASE_KEY = SUPABASE_KEY.replace(/^sb_publishable_sb_publishable_/i, "sb_publishable_");
 const CYCLE_MONTHS = Number(CFG.CYCLE_MONTHS || 6);
 const REMIND_DAYS = Number(CFG.REMIND_DAYS || 30);
-const SESSION_KEY = String(CFG.SESSION_STORAGE_KEY || "switchcare_session_v8");
-const CONFIG_OK = Boolean(SUPABASE_URL && SUPABASE_KEY && SUPABASE_KEY.startsWith("sb_publishable_"));
+const SESSION_KEY = cleanText(CFG.SESSION_STORAGE_KEY || "switchcare_session_v10");
+const CONFIG_OK = /^https:\/\/[^\s]+\.supabase\.co$/i.test(SUPABASE_URL)
+  && /^sb_publishable_[A-Za-z0-9_\-.]+$/.test(SUPABASE_KEY);
 
 let session = null;
 let devices = [];
@@ -256,7 +259,7 @@ function openDevice(x=null){
   <div class="form form-grid"><div><label>開關料號（10位）*</label><input id="fm" maxlength="10" value="${esc(v.material_no)}"></div><div><label>台電編號 *</label><input id="ft" value="${esc(v.taipower_no)}"></div>
   <div class="full"><label>型式 *</label><input id="fy" value="${esc(v.type)}"></div><div><label>評價類型</label><select id="fr"><option ${v.rating_type==="新品"?"selected":""}>新品</option><option ${v.rating_type==="舊品"?"selected":""}>舊品</option></select></div>
   <div><label>入帳日期 *</label><input id="fe" type="date" value="${v.entry_date||today()}"></div><div><label>倉庫</label><input id="fw" value="${esc(v.warehouse||"")}"></div>
-  <div><label>儲位</label><input id="fl" value="${esc(v.location||"")}></div><div class="full"><label>備註</label><textarea id="fn">${esc(v.remark||"")}</textarea></div></div>
+  <div><label>儲位</label><input id="fl" value="${esc(v.location||"")}"></div><div class="full"><label>備註</label><textarea id="fn">${esc(v.remark||"")}</textarea></div></div>
   <div id="formMsg" class="notice danger" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" id="saveDeviceBtn" type="button" onclick="saveDevice('${x?.id||""}')">儲存</button></div></div></div>`);
 }
 async function saveDevice(id){

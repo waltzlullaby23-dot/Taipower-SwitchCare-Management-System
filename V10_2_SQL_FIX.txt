@@ -1,0 +1,16 @@
+# SwitchCare v10.2 FINAL — SQL migration fix
+
+你剛才看到的錯誤：
+ERROR 42883: function public.log_event(switches, text, text, text, jsonb, jsonb) does not exist
+
+原因不是資料表壞掉，而是 v10.1 最後的 REVOKE 指令把 composite type 的 function signature 寫死成 `public.switches`。
+PostgreSQL 在你的專案中實際解析成 `switches`，因此最後這一行找不到完全一致的 function identity，SQL 在最後階段中止。
+
+v10.2 的修正：
+- 移除硬編碼的 log_event / audit_switch REVOKE signatures。
+- 改為查詢 pg_catalog 的 pg_get_function_identity_arguments()。
+- 用動態 SQL 執行 REVOKE。
+- 保留 v10.1 的 SECURITY DEFINER RPC、RLS、6個月週期與交易邏輯。
+- 不 DROP TABLE，不刪除既有資料。
+
+請只執行 v10.2 的 database/schema.sql。
