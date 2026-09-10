@@ -1,4 +1,4 @@
-# SwitchCare Enterprise v10.2.3.1
+# SwitchCare Enterprise v11.3.1
 
 ## 本版目標
 
@@ -22,7 +22,7 @@
 7. 所有領用、退庫、送檢、充電完成都有 Audit Log。
 8. 一般使用者不應直接刪除設備；正式流程以「停用」保留完整歷史。
 
-## v10.2.3 主要修正
+## v11.3 主要修正
 
 - 統一 JavaScript 變數命名，避免 `CYCLE` / `CYCLE_MONTHS` 混用。
 - 登入改用直接 Supabase REST Auth，避免先前瀏覽器 `fetch headers` 編碼問題。
@@ -59,7 +59,7 @@ window.SWITCHCARE_CONFIG = {
   COMPANY_NAME: "台電",
   CYCLE_MONTHS: 6,
   REMIND_DAYS: 30,
-  SESSION_STORAGE_KEY: "switchcare_session_v10.2.3"
+  SESSION_STORAGE_KEY: "switchcare_session_v11.3"
 };
 ```
 
@@ -118,3 +118,19 @@ PostgreSQL + transaction records + Audit Log 是長期保存的資料架構，�
 ## 重要
 
 若舊版資料庫已經有資料，重新執行 schema 時不會刪除 `switches` 既有資料；但正式上線前仍建議先做一次完整資料庫備份。
+
+
+
+## v11 Professional Upgrade
+
+本版依照完整企業化藍圖擴充：
+- 履歷週期取代生命週期頁籤名稱
+- 設備生命週期戰情Dashboard
+- 健康度與風險指標
+- 檢修管理資料層
+- 異常與風險中心
+- 文件與證據鏈資料層
+- 停用／報廢／待修／待驗等狀態模型
+- inspection_records / repair_records / disposal_records / documents / exception_records
+- 擴充設備主檔欄位
+- controlled RPC + RLS

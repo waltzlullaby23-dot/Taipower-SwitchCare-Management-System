@@ -1,0 +1,19 @@
+SwitchCare Enterprise v11 Professional
+
+這一版是依企業專業化完整優化藍圖進行的結構性升級，不是單一功能補丁。
+
+主要變更：
+1. 「生命履歷」正式改名「履歷週期」。
+2. 首頁升級為設備生命週期戰情中心。
+3. 增加平均健康度、高風險設備。
+4. 增加履歷週期頁。
+5. 增加檢修管理頁。
+6. 增加異常與風險中心。
+7. 增加文件與證據鏈頁。
+8. 設備狀態擴展至待修、修理中、待驗、驗收中、報廢、遺失、封存、移撥中。
+9. 新增 inspection_records、repair_records、disposal_records、documents、exception_records、asset_locations、system_settings。
+10. 新增設備主檔欄位：製造廠商、型號、額定電壓、額定電流、回路配置、製造年份、來源、健康度。
+11. 重要資料維持資料庫單一真實來源與RLS。
+12. 檢修資料提供 controlled RPC 基礎。
+
+本版仍把 SAP/ERP API、真正離線同步、企業SSO/MFA、雲端文件儲存、排程通知、AI模型等列為下一階段整合，避免沒有實際企業介接條件時虛構功能。

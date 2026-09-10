@@ -26,7 +26,7 @@ create table if not exists public.switches (
   location text,
   entry_date date not null,
   state text not null default '在庫'
-    check (state in ('在庫','領用中','送檢充電','充電中','停用')),
+    check (state in ('在庫','領用中','送檢充電','充電中','待修','修理中','待驗','驗收中','停用','報廢','遺失','封存','移撥中')),
   cycle_start_date date,
   last_charge_date date,
   next_charge_date date,
@@ -90,6 +90,14 @@ create table if not exists public.audit_log (
 -- Add missing columns for older installations.
 alter table public.audit_log add column if not exists actor_id uuid;
 alter table public.audit_log add column if not exists actor_email text;
+alter table public.switches add column if not exists manufacturer text;
+alter table public.switches add column if not exists model text;
+alter table public.switches add column if not exists rated_voltage text;
+alter table public.switches add column if not exists rated_current text;
+alter table public.switches add column if not exists circuit_config text;
+alter table public.switches add column if not exists manufacture_year integer;
+alter table public.switches add column if not exists source_type text;
+alter table public.switches add column if not exists health_score numeric(5,2) default 85;
 alter table public.switches add column if not exists remark text;
 alter table public.switches add column if not exists updated_at timestamptz not null default now();
 alter table public.charge_records add column if not exists department text;
@@ -603,7 +611,211 @@ begin
 end $$;
 
 -- ============================================================
--- 6. Conservative backfill
+-- 6. 
+-- ============================================================
+-- Enterprise extension tables
+-- ============================================================
+
+create table if not exists public.inspection_records (
+  id uuid primary key default gen_random_uuid(),
+  switch_id uuid not null references public.switches(id),
+  inspection_date date not null,
+  inspection_type text not null,
+  department text,
+  technician text,
+  result text,
+  qualified boolean,
+  repair_required boolean default false,
+  failure_reason text,
+  handling_method text,
+  completion_date date,
+  document_id uuid,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.repair_records (
+  id uuid primary key default gen_random_uuid(),
+  switch_id uuid not null references public.switches(id),
+  start_date date not null,
+  end_date date,
+  department text,
+  technician text,
+  repair_reason text,
+  repair_method text,
+  result text,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.disposal_records (
+  id uuid primary key default gen_random_uuid(),
+  switch_id uuid not null references public.switches(id),
+  application_date date not null,
+  approval_date date,
+  disposal_date date,
+  disposal_no text,
+  reason text,
+  certificate_no text,
+  approved_by text,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.documents (
+  id uuid primary key default gen_random_uuid(),
+  switch_id uuid references public.switches(id),
+  document_type text not null,
+  file_name text not null,
+  storage_path text,
+  event_type text,
+  event_id uuid,
+  version integer not null default 1,
+  uploaded_by uuid,
+  uploaded_email text,
+  uploaded_at timestamptz not null default now(),
+  is_active boolean not null default true,
+  note text
+);
+
+create table if not exists public.exception_records (
+  id uuid primary key default gen_random_uuid(),
+  switch_id uuid references public.switches(id),
+  exception_type text not null,
+  severity text not null default '一般' check (severity in ('高','中','一般')),
+  detected_at timestamptz not null default now(),
+  status text not null default '新建' check (status in ('新建','已確認','處理中','已排除','關閉')),
+  description text,
+  resolution text,
+  detected_by uuid,
+  detected_email text,
+  resolved_at timestamptz,
+  resolved_by text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.asset_locations (
+  id uuid primary key default gen_random_uuid(),
+  warehouse text not null,
+  location_code text not null,
+  description text,
+  active boolean not null default true,
+  unique(warehouse, location_code)
+);
+
+create table if not exists public.system_settings (
+  setting_key text primary key,
+  setting_value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_inspection_switch on public.inspection_records(switch_id);
+create index if not exists idx_repair_switch on public.repair_records(switch_id);
+create index if not exists idx_disposal_switch on public.disposal_records(switch_id);
+create index if not exists idx_documents_switch on public.documents(switch_id);
+create index if not exists idx_exception_switch on public.exception_records(switch_id);
+create index if not exists idx_exception_status on public.exception_records(status);
+
+-- ============================================================
+-- Enterprise triggers
+-- ============================================================
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname='trg_inspection_updated' and tgrelid='public.inspection_records'::regclass
+  ) then
+    create trigger trg_inspection_updated before update on public.inspection_records
+    for each row execute function public.touch_updated_at();
+  end if;
+  if not exists (
+    select 1 from pg_trigger
+    where tgname='trg_repair_updated' and tgrelid='public.repair_records'::regclass
+  ) then
+    create trigger trg_repair_updated before update on public.repair_records
+    for each row execute function public.touch_updated_at();
+  end if;
+end $$;
+
+-- ============================================================
+-- Security / RLS
+-- ============================================================
+
+alter table public.inspection_records enable row level security;
+alter table public.repair_records enable row level security;
+alter table public.disposal_records enable row level security;
+alter table public.documents enable row level security;
+alter table public.exception_records enable row level security;
+alter table public.asset_locations enable row level security;
+alter table public.system_settings enable row level security;
+
+drop policy if exists inspection_select_authenticated on public.inspection_records;
+create policy inspection_select_authenticated on public.inspection_records for select to authenticated using (true);
+drop policy if exists repair_select_authenticated on public.repair_records;
+create policy repair_select_authenticated on public.repair_records for select to authenticated using (true);
+drop policy if exists disposal_select_authenticated on public.disposal_records;
+create policy disposal_select_authenticated on public.disposal_records for select to authenticated using (true);
+drop policy if exists documents_select_authenticated on public.documents;
+create policy documents_select_authenticated on public.documents for select to authenticated using (true);
+drop policy if exists exception_select_authenticated on public.exception_records;
+create policy exception_select_authenticated on public.exception_records for select to authenticated using (true);
+drop policy if exists locations_select_authenticated on public.asset_locations;
+create policy locations_select_authenticated on public.asset_locations for select to authenticated using (true);
+drop policy if exists settings_select_authenticated on public.system_settings;
+create policy settings_select_authenticated on public.system_settings for select to authenticated using (true);
+
+grant select on public.inspection_records to authenticated;
+grant select on public.repair_records to authenticated;
+grant select on public.disposal_records to authenticated;
+grant select on public.documents to authenticated;
+grant select on public.exception_records to authenticated;
+grant select on public.asset_locations to authenticated;
+grant select on public.system_settings to authenticated;
+
+-- ============================================================
+-- Controlled inspection RPC
+-- ============================================================
+
+drop function if exists public.create_inspection(uuid,date,text,text,text,text,boolean,boolean,text,text,text);
+create function public.create_inspection(
+  p_switch_id uuid,
+  p_inspection_date date,
+  p_inspection_type text,
+  p_department text default null,
+  p_technician text default null,
+  p_result text default null,
+  p_qualified boolean default null,
+  p_repair_required boolean default false,
+  p_failure_reason text default null,
+  p_handling_method text default null,
+  p_note text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare v_id uuid;
+begin
+  if not exists(select 1 from public.switches where id=p_switch_id) then raise exception '設備不存在'; end if;
+  insert into public.inspection_records(
+    switch_id,inspection_date,inspection_type,department,technician,result,
+    qualified,repair_required,failure_reason,handling_method,note
+  )
+  values(
+    p_switch_id,p_inspection_date,p_inspection_type,p_department,p_technician,p_result,
+    p_qualified,p_repair_required,p_failure_reason,p_handling_method,p_note
+  )
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+grant execute on function public.create_inspection(uuid,date,text,text,text,text,boolean,boolean,text,text,text) to authenticated;
+
+-- Conservative backfill
 -- ============================================================
 
 insert into public.charge_records(
