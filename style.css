@@ -60,3 +60,5 @@ th{background:#f8f9fc;color:#5c687b;white-space:nowrap}
 @media(max-width:1100px){.cards{grid-template-columns:repeat(3,minmax(120px,1fr))}.section-grid{grid-template-columns:1fr}}
 @media(max-width:900px){.sidebar{width:200px}.main{margin-left:200px;width:calc(100% - 200px);padding:20px}}
 @media(max-width:700px){.app{display:block}.sidebar{position:static;width:100%;height:auto}.main{margin-left:0;width:100%}.form-grid{grid-template-columns:1fr}.full{grid-column:auto}.cards{grid-template-columns:repeat(2,minmax(120px,1fr))}.topbar{align-items:flex-start;flex-direction:column}}
+
+.linkbtn{border:0;background:transparent;color:#344b74;font-weight:700;text-decoration:underline;cursor:pointer;padding:0;font:inherit}.linkbtn:hover{opacity:.75}
