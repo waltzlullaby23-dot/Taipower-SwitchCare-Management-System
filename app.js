@@ -168,7 +168,7 @@ async function signIn(){
   try{
     const body=await api("/auth/v1/token?grant_type=password",{
       method:"POST",
-      headers:{"X-Client-Info":"switchcare-v11.2"},
+      headers:{"X-Client-Info":"switchcare-v11.3"},
       body:JSON.stringify({email,password})
     });
     if(!body?.access_token)throw new Error("Supabase 未回傳登入 Token。");
@@ -190,7 +190,7 @@ function pageTitle(){return({dashboard:"設備生命週期戰情中心",switches
 function go(p){page=p;renderLayout();render();}
 function renderLayout(){
   document.getElementById("app").innerHTML=`<div class="app">
-  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v11.2｜生命週期・充電・移撥・稽核</small></div>
+  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v11.3｜生命週期・充電・移撥・稽核</small></div>
   <nav class="nav">${nav("dashboard","儀表板")}${nav("switches","開關設備主檔")}${nav("charging","充電與週期管理")}${nav("usage","領用／退庫管理")}${nav("lifecycle","履歷週期")}${nav("inspection","檢修管理")}${nav("exceptions","異常與風險中心")}${nav("documents","移撥單／文件管理")}${nav("reports","報表與稽核")}${nav("settings","系統設定")}</nav></aside>
   <main class="main"><div class="topbar"><div><h1>${pageTitle()}</h1><span class="muted">在庫計時｜領用停止｜退庫重新起算6個月｜履歷／檢修／稽核</span></div>
   <div style="display:flex;align-items:center;gap:10px">${page!=="settings"?`<button class="btn" type="button" onclick="openDevice()">＋ 新增開關</button>`:""}<span class="userbar">${esc(session?.user?.email||"")}</span><button class="btn secondary small" type="button" onclick="signOut()">登出</button></div></div><div id="content"></div></main></div>`;
@@ -339,7 +339,9 @@ function openDevice(x=null){
   <div class="full"><label>型式 *</label><input id="fy" value="${esc(v.type)}"></div><div><label>評價類型</label><select id="fr"><option ${v.rating_type==="新品"?"selected":""}>新品</option><option ${v.rating_type==="舊品"?"selected":""}>舊品</option></select></div>
   <div><label>入帳日期 *</label><input id="fe" type="date" value="${v.entry_date||today()}"></div><div><label>倉庫</label><input id="fw" value="${esc(v.warehouse||"")}"></div>
   <div><label>儲位</label><input id="fl" value="${esc(v.location||"")}"></div><div class="full"><label>備註</label><textarea id="fn">${esc(v.remark||"")}</textarea></div></div>
-  <div id="formMsg" class="notice danger" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" id="saveDeviceBtn" type="button" onclick="saveDevice('${x?.id||""}')">儲存</button></div></div></div>`);
+  ${x&&v.state==="在庫"?'<div class="notice">修改「入帳日期」後，系統會同步重算目前週期起算日與下次充電日（入帳日＋6個月）。歷史充電紀錄不會被改寫。</div>':''}
+  ${x?'<div class="notice warning">刪除功能僅供刪除錯誤建檔。已有領用紀錄或已完成／送檢中的充電歷史時，系統會拒絕刪除，應改用停用等正式流程。</div>':''}
+  <div id="formMsg" class="notice danger" style="display:none"></div><div class="page-actions">${x?`<button class="btn danger" type="button" onclick="deleteSwitch('${x.id}')">刪除建檔</button>`:""}<span style="flex:1"></span><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" id="saveDeviceBtn" type="button" onclick="saveDevice('${x?.id||""}')">儲存</button></div></div></div>`);
 }
 async function saveDevice(id){
   if(busy)return;busy=true;
@@ -360,6 +362,25 @@ async function saveDevice(id){
     closeModal();await refreshAll();
   }catch(e){const m=document.getElementById("formMsg");if(m){m.textContent="儲存失敗："+errText(e);m.style.display="block";}}
   finally{busy=false;const b=document.getElementById("saveDeviceBtn");if(b){b.disabled=false;b.textContent="儲存";}}
+}
+
+async function deleteSwitch(id){
+  const x=devices.find(z=>z.id===id);
+  if(!x)return;
+  const ok=confirm(`確定刪除這筆設備建檔？\n\n台電編號：${x.taipower_no}\n料號：${x.material_no}\n型式：${x.type}\n\n此功能僅供刪除錯誤建檔。刪除後主檔與可刪除的初始週期資料將移除，但系統會留下「刪除設備」稽核事件。`);
+  if(!ok)return;
+  const reason=prompt("請輸入刪除原因（例如：入帳日期誤植、台電編號建檔錯誤）", "錯誤建檔");
+  if(reason===null)return;
+  try{
+    await api("/rest/v1/rpc/delete_switch_master",{method:"POST",headers:{"Accept-Profile":"public"},body:JSON.stringify({p_switch_id:id,p_reason:reason.trim()||"錯誤建檔"})});
+    closeModal();
+    await refreshAll();
+    alert("設備建檔已刪除。");
+  }catch(e){
+    const m=document.getElementById("formMsg");
+    if(m){m.textContent="刪除失敗："+errText(e);m.style.display="block";}
+    else alert("刪除失敗："+errText(e));
+  }
 }
 
 function openUsage(mode,ids){
@@ -425,9 +446,9 @@ async function detail(id){
     ]);
   }catch(e){return alert("讀取設備履歷失敗："+errText(e));}
   const s=statusOf(x);
-  document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>設備完整生命履歷</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
+  document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>設備履歷週期</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
   <div class="form-grid"><div><b>料號</b><br>${esc(x.material_no)}</div><div><b>台電編號</b><br>${esc(x.taipower_no)}</div><div class="full"><b>型式</b><br>${esc(x.type)}</div><div><b>評價</b><br>${esc(x.rating_type)}</div><div><b>狀態</b><br><span class="badge ${s.cls}">${s.label}</span></div><div><b>入帳日期</b><br>${fmt(x.entry_date)}</div><div><b>目前週期起算</b><br>${fmt(x.cycle_start_date)}</div><div><b>下次充電</b><br>${fmt(x.next_charge_date)}</div><div><b>倉庫／儲位</b><br>${esc(x.warehouse||"-")} / ${esc(x.location||"-")}</div></div>
-  <div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal();openDevice(devices.find(z=>z.id==='${x.id}'))">編輯</button>${x.state==="在庫"&&["逾期","即將到期"].includes(s.label)?`<button class="btn" type="button" onclick="closeModal();openCharge('${x.id}')">送檢充電</button>`:""}${["送檢充電","充電中"].includes(x.state)?`<button class="btn success" type="button" onclick="closeModal();completeCharge('${x.id}')">完成充電</button>`:""}${x.state==="領用中"?`<button class="btn success" type="button" onclick="closeModal();openUsage('return',['${x.id}'])">退庫</button>`:`<button class="btn danger" type="button" onclick="closeModal();openUsage('issue',['${x.id}'])">領用／出庫</button>`}</div>
+  <div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal();openDevice(devices.find(z=>z.id==='${x.id}'))">編輯</button>${x.state==="在庫"&&["逾期","即將到期"].includes(s.label)?`<button class="btn" type="button" onclick="closeModal();openCharge('${x.id}')">送檢充電</button>`:""}${["送檢充電","充電中"].includes(x.state)?`<button class="btn success" type="button" onclick="closeModal();completeCharge('${x.id}')">完成充電</button>`:""}${x.state==="領用中"?`<button class="btn success" type="button" onclick="closeModal();openUsage('return',['${x.id}'])">退庫</button>`:`<button class="btn danger" type="button" onclick="closeModal();openUsage('issue',['${x.id}'])">領用／出庫</button>`}${x.state==="在庫"?`<button class="btn danger" type="button" onclick="deleteSwitch('${x.id}')">刪除建檔</button>`:""}</div>
   <div class="section-grid"><div class="panel"><h3>充電履歷</h3>${chargeRowsTable(c)}</div><div class="panel"><h3>領用履歷</h3>${usageRowsTable(u)}</div><div class="panel"><h3>稽核履歷</h3>${auditTimeline(h)}</div></div>
   </div></div>`);
 }
