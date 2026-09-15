@@ -1,4 +1,4 @@
-/* SwitchCare Enterprise v11.6
+/* SwitchCare Enterprise v11.7
    Professional enterprise rebuild:
    - Direct Supabase REST API with ASCII-safe request headers
    - No supabase-js Auth dependency
@@ -44,6 +44,14 @@ function addMonths(dateStr, months){
   return `${out.getUTCFullYear()}-${String(out.getUTCMonth()+1).padStart(2,"0")}-${String(out.getUTCDate()).padStart(2,"0")}`;
 }
 function dayDiff(from,to){ return Math.round((parseDate(to)-parseDate(from))/86400000); }
+
+const INSPECTION_STATES = new Set(["送檢充電","充電中","待修","修理中","待驗","驗收中"]);
+function currentCycleStart(x){
+  return INSPECTION_STATES.has(x?.state) && x?.send_date ? x.send_date : x?.cycle_start_date;
+}
+function currentNextCharge(x){
+  return INSPECTION_STATES.has(x?.state) && x?.send_date ? addMonths(x.send_date,CYCLE_MONTHS) : x?.next_charge_date;
+}
 function esc(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
 function validEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 
@@ -221,7 +229,7 @@ function statusOf(x){
 function card(t,n,c="",click=""){return click?`<button class="card kpi-click ${c}" type="button" onclick="${click}"><div class="label">${t}</div><div class="num">${n}</div><div class="kpi-hint">點擊查看</div></button>`:`<div class="card ${c}"><div class="label">${t}</div><div class="num">${n}</div></div>`;}
 function deviceTable(list,showDays=false){
   return`<div class="table-wrap"><table><thead><tr><th>料號</th><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>單號</th><th>操作</th></tr></thead><tbody>
-  ${list.map(x=>{const s=statusOf(x);return`<tr><td>${esc(x.material_no)}</td><td>${esc(x.taipower_no)}</td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(x.cycle_start_date)}</td><td>${fmt(x.next_charge_date)}${showDays&&s.days!==null?`<br><span class="muted">${s.days<0?"逾期 "+Math.abs(s.days)+" 天":"剩 "+s.days+" 天"}</span>`:""}</td><td>${esc(x.transfer_no||x.issue_no||"-")}</td><td><button class="btn small secondary" type="button" onclick="detail('${x.id}')">查看</button></td></tr>`}).join("")}
+  ${list.map(x=>{const s=statusOf(x);return`<tr><td>${esc(x.material_no)}</td><td>${esc(x.taipower_no)}</td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(currentCycleStart(x))}</td><td>${fmt(currentNextCharge(x))}${showDays&&s.days!==null?`<br><span class="muted">${s.days<0?"逾期 "+Math.abs(s.days)+" 天":"剩 "+s.days+" 天"}</span>`:""}</td><td>${esc(x.transfer_no||x.issue_no||"-")}</td><td><button class="btn small secondary" type="button" onclick="detail('${x.id}')">查看</button></td></tr>`}).join("")}
   </tbody></table></div>`;
 }
 
@@ -251,7 +259,7 @@ function showDashboardList(kind){
   else if(kind==="process"){list=list.filter(x=>["送檢充電","充電中"].includes(x.state));title="送檢／充電設備";}
   else if(kind==="high"){list=list.filter(x=>riskOf(x).label==="高").sort((a,b)=>healthScore(a)-healthScore(b));title="高風險設備";}
   else if(kind==="health"){list=list.sort((a,b)=>healthScore(a)-healthScore(b));title="健康度清單";}
-  document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box" style="max-width:1200px"><div class="modal-head"><h2>${esc(title)}（${list.length}）</h2><button class="close" type="button" onclick="closeModal()">×</button></div>${list.length?`<div class="table-wrap"><table><thead><tr><th>料號</th><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>健康度</th><th>風險</th><th>操作</th></tr></thead><tbody>${list.map(x=>{const s=statusOf(x),r=riskOf(x);return`<tr><td>${esc(x.material_no)}</td><td><b>${esc(x.taipower_no)}</b></td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(x.cycle_start_date)}</td><td>${fmt(x.next_charge_date)}</td><td>${healthScore(x)}</td><td><span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="closeModal();detail('${x.id}')">查看</button></td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">目前沒有符合條件的設備。</div>'}<div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">關閉</button></div></div></div>`);
+  document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box" style="max-width:1200px"><div class="modal-head"><h2>${esc(title)}（${list.length}）</h2><button class="close" type="button" onclick="closeModal()">×</button></div>${list.length?`<div class="table-wrap"><table><thead><tr><th>料號</th><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>健康度</th><th>風險</th><th>操作</th></tr></thead><tbody>${list.map(x=>{const s=statusOf(x),r=riskOf(x);return`<tr><td>${esc(x.material_no)}</td><td><b>${esc(x.taipower_no)}</b></td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(currentCycleStart(x))}</td><td>${fmt(currentNextCharge(x))}</td><td>${healthScore(x)}</td><td><span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="closeModal();detail('${x.id}')">查看</button></td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">目前沒有符合條件的設備。</div>'}<div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">關閉</button></div></div></div>`);
 }
 function healthScore(x){
   const base=Number(x.health_score ?? 85);
@@ -269,7 +277,7 @@ function lifecyclePage(){
   document.getElementById("content").innerHTML=`<div class="panel"><div class="toolbar"><input id="lq" placeholder="搜尋台電編號／料號／型式" oninput="filterLifecycle()"><select id="ls" onchange="filterLifecycle()"><option value="">全部</option><option>在庫</option><option>領用中</option><option>送檢充電</option><option>逾期</option></select></div><div id="lt">${lifecycleTable(list)}</div></div>`;
 }
 function lifecycleTable(list){
- return `<div class="table-wrap"><table><thead><tr><th>設備</th><th>目前狀態</th><th>週期起算</th><th>下次充電</th><th>最後充電</th><th>健康度</th><th>風險</th><th>操作</th></tr></thead><tbody>${list.map(x=>{const s=statusOf(x),r=riskOf(x);return `<tr><td><b>${esc(x.taipower_no)}</b><br><span class="muted">${esc(x.material_no)}</span></td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(x.cycle_start_date)}</td><td>${fmt(x.next_charge_date)}</td><td>${fmt(x.last_charge_date)}</td><td>${healthScore(x)}</td><td><span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="detail('${x.id}')">查看完整履歷</button></td></tr>`}).join("")}</tbody></table></div>`;
+ return `<div class="table-wrap"><table><thead><tr><th>設備</th><th>目前狀態</th><th>週期起算</th><th>下次充電</th><th>最後充電</th><th>健康度</th><th>風險</th><th>操作</th></tr></thead><tbody>${list.map(x=>{const s=statusOf(x),r=riskOf(x);return `<tr><td><b>${esc(x.taipower_no)}</b><br><span class="muted">${esc(x.material_no)}</span></td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(currentCycleStart(x))}</td><td>${fmt(currentNextCharge(x))}</td><td>${fmt(x.last_charge_date)}</td><td>${healthScore(x)}</td><td><span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="detail('${x.id}')">查看完整履歷</button></td></tr>`}).join("")}</tbody></table></div>`;
 }
 function filterLifecycle(){
  const q=(document.getElementById("lq").value||"").toLowerCase(),s=document.getElementById("ls").value;
@@ -418,12 +426,12 @@ function groupedDeviceTable(list){
   const groups=new Map();
   [...list].sort((a,b)=>String(a.material_no).localeCompare(String(b.material_no))||String(a.taipower_no).localeCompare(String(b.taipower_no))).forEach(x=>{if(!groups.has(x.material_no))groups.set(x.material_no,[]);groups.get(x.material_no).push(x);});
   if(!groups.size)return '<div class="empty">目前沒有設備資料。</div>';
-  return [...groups.entries()].map(([material,rows])=>`<div class="group-panel"><div class="group-head"><div><strong>料號：${esc(material)}</strong><span class="muted">　${rows.length} 具</span></div><div class="muted">${esc(rows[0].type||"")}</div></div><div class="table-wrap"><table><thead><tr><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>單號</th><th>健康度</th><th>操作</th></tr></thead><tbody>${rows.map(x=>{const s=statusOf(x),r=riskOf(x);return`<tr><td><b>${esc(x.taipower_no)}</b></td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(x.cycle_start_date)}</td><td>${fmt(x.next_charge_date)}</td><td>${esc(x.transfer_no||x.issue_no||"-")}</td><td>${healthScore(x)} <span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="detail('${x.id}')">查看</button></td></tr>`}).join("")}</tbody></table></div></div>`).join("");
+  return [...groups.entries()].map(([material,rows])=>`<div class="group-panel"><div class="group-head"><div><strong>料號：${esc(material)}</strong><span class="muted">　${rows.length} 具</span></div><div class="muted">${esc(rows[0].type||"")}</div></div><div class="table-wrap"><table><thead><tr><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>單號</th><th>健康度</th><th>操作</th></tr></thead><tbody>${rows.map(x=>{const s=statusOf(x),r=riskOf(x);return`<tr><td><b>${esc(x.taipower_no)}</b></td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(currentCycleStart(x))}</td><td>${fmt(currentNextCharge(x))}</td><td>${esc(x.transfer_no||x.issue_no||"-")}</td><td>${healthScore(x)} <span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="detail('${x.id}')">查看</button></td></tr>`}).join("")}</tbody></table></div></div>`).join("");
 }
 function filterDevices(){const q=(document.getElementById("sq").value||"").toLowerCase(),s=document.getElementById("ss").value;document.getElementById("dt").innerHTML=groupedDeviceTable(devices.filter(x=>(!q||[x.material_no,x.taipower_no,x.type,x.issue_no,x.transfer_no].join(" ").toLowerCase().includes(q))&&(!s||statusOf(x).label===s)));}
 function chargingPage(){
   const l=devices.filter(x=>x.state!=="領用中"&&["即將到期","逾期","送檢充電","充電中"].includes(statusOf(x).label));
-  document.getElementById("content").innerHTML=`<div class="notice">只有在庫設備計算6個月週期。領用停止倒數；退庫後由退庫日重新起算。</div><div class="panel"><div class="toolbar"><button class="btn" type="button" onclick="batchSend()">批次送檢</button></div>${l.length?deviceTable(l,true):'<div class="empty">目前沒有需要處理的設備</div>'}</div>`;
+  document.getElementById("content").innerHTML=`<div class="notice">在庫設備以入帳／退庫／完成充電日計算6個月；一旦開單送檢，檢修中的目前週期改以「開單送檢修日」起算6個月；領用期間停止倒數。</div><div class="panel"><div class="toolbar"><button class="btn" type="button" onclick="batchSend()">批次送檢</button></div>${l.length?deviceTable(l,true):'<div class="empty">目前沒有需要處理的設備</div>'}</div>`;
 }
 function usagePage(){
   const i=devices.filter(x=>x.state==="領用中"),s=devices.filter(x=>x.state!=="領用中");
@@ -559,7 +567,7 @@ async function detail(id){
   }catch(e){return alert("讀取設備履歷失敗："+errText(e));}
   const s=statusOf(x);
   document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>設備履歷週期</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
-  <div class="form-grid"><div><b>料號</b><br>${esc(x.material_no)}</div><div><b>台電編號</b><br>${esc(x.taipower_no)}</div><div class="full"><b>型式</b><br>${esc(x.type)}</div><div><b>評價</b><br>${esc(x.rating_type)}</div><div><b>狀態</b><br><span class="badge ${s.cls}">${s.label}</span></div><div><b>入帳日期</b><br>${fmt(x.entry_date)}</div><div><b>目前週期起算</b><br>${fmt(x.cycle_start_date)}</div><div><b>下次充電</b><br>${fmt(x.next_charge_date)}</div><div><b>倉庫／儲位</b><br>${esc(x.warehouse||"-")} / ${esc(x.location||"-")}</div></div>
+  <div class="form-grid"><div><b>料號</b><br>${esc(x.material_no)}</div><div><b>台電編號</b><br>${esc(x.taipower_no)}</div><div class="full"><b>型式</b><br>${esc(x.type)}</div><div><b>評價</b><br>${esc(x.rating_type)}</div><div><b>狀態</b><br><span class="badge ${s.cls}">${s.label}</span></div><div><b>入帳日期</b><br>${fmt(x.entry_date)}</div><div><b>目前週期起算</b><br>${fmt(currentCycleStart(x))}</div><div><b>下次充電</b><br>${fmt(currentNextCharge(x))}</div><div><b>倉庫／儲位</b><br>${esc(x.warehouse||"-")} / ${esc(x.location||"-")}</div></div>
   <div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal();openDevice(devices.find(z=>z.id==='${x.id}'))">編輯</button>${x.state==="在庫"&&["逾期","即將到期"].includes(s.label)?`<button class="btn" type="button" onclick="closeModal();openCharge('${x.id}')">送檢充電</button>`:""}${["送檢充電","充電中"].includes(x.state)?`<button class="btn success" type="button" onclick="closeModal();completeCharge('${x.id}')">完成充電</button>`:""}${x.state==="領用中"?`<button class="btn success" type="button" onclick="closeModal();openUsage('return',['${x.id}'])">退庫</button>`:`<button class="btn danger" type="button" onclick="closeModal();openUsage('issue',['${x.id}'])">領用／出庫</button>`}${x.state==="在庫"?`<button class="btn danger" type="button" onclick="deleteSwitch('${x.id}')">刪除建檔</button>`:""}</div>
   <div class="section-grid"><div class="panel"><h3>充電履歷</h3>${chargeRowsTable(c)}</div><div class="panel"><h3>領用履歷</h3>${usageRowsTable(u)}</div><div class="panel"><h3>稽核履歷</h3>${auditTimeline(h)}</div></div>
   </div></div>`);
@@ -580,7 +588,7 @@ function report(k){
   else{h=["料號","台電編號","型式","領用日期","領用單號"];r=devices.filter(x=>x.state==="領用中").map(x=>[x.material_no,x.taipower_no,x.type,x.issue_date,x.issue_no])}
   downloadCSV(h,r,"SwitchCare_"+k+"_"+today()+".csv");
 }
-function exportCSV(){downloadCSV(["料號","型式","台電編號","評價","倉庫","儲位","入帳日期","狀態","週期起算日","上次充電","下次充電","領用日期","退庫日期","領用單號","充電移撥單號"],devices.map(x=>[x.material_no,x.type,x.taipower_no,x.rating_type,x.warehouse,x.location,x.entry_date,x.state,x.cycle_start_date,x.last_charge_date,x.next_charge_date,x.issue_date,x.return_date,x.issue_no,x.transfer_no]),"SwitchCare_設備主檔_"+today()+".csv")}
+function exportCSV(){downloadCSV(["料號","型式","台電編號","評價","倉庫","儲位","入帳日期","狀態","週期起算日","上次充電","下次充電","領用日期","退庫日期","領用單號","充電移撥單號"],devices.map(x=>[x.material_no,x.type,x.taipower_no,x.rating_type,x.warehouse,x.location,x.entry_date,x.state,currentCycleStart(x),x.last_charge_date,currentNextCharge(x),x.issue_date,x.return_date,x.issue_no,x.transfer_no]),"SwitchCare_設備主檔_"+today()+".csv")}
 function downloadCSV(head,rows,name){const q=v=>`"${String(v??"").replace(/"/g,'""')}"`,csv="\uFEFF"+[head,...rows].map(r=>r.map(q).join(",")).join("\r\n"),a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=name;a.click();}
 
 function settingsPage(){document.getElementById("content").innerHTML=`<div class="panel"><h2>連線診斷</h2><div class="diagnostic">Project URL：${esc(SUPABASE_URL)}
