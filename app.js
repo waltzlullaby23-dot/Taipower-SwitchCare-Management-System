@@ -1,4 +1,4 @@
-/* SwitchCare Enterprise v11
+/* SwitchCare Enterprise v11.6
    Professional enterprise rebuild:
    - Direct Supabase REST API with ASCII-safe request headers
    - No supabase-js Auth dependency
@@ -16,6 +16,7 @@ SUPABASE_KEY = SUPABASE_KEY.replace(/^sb_publishable_sb_publishable_/i, "sb_publ
 const CYCLE_MONTHS = Number(CFG.CYCLE_MONTHS || 6);
 const REMIND_DAYS = Number(CFG.REMIND_DAYS || 30);
 const SESSION_KEY = cleanText(CFG.SESSION_STORAGE_KEY || "switchcare_session_v11");
+const STORAGE_BUCKET = cleanText(CFG.STORAGE_BUCKET || "switchcare-documents");
 const CONFIG_OK = /^https:\/\/[^\s]+\.supabase\.co$/i.test(SUPABASE_URL)
   && /^sb_publishable_[A-Za-z0-9_\-.]+$/.test(SUPABASE_KEY);
 
@@ -168,7 +169,7 @@ async function signIn(){
   try{
     const body=await api("/auth/v1/token?grant_type=password",{
       method:"POST",
-      headers:{"X-Client-Info":"switchcare-v11.3"},
+      headers:{"X-Client-Info":"switchcare-v11.6"},
       body:JSON.stringify({email,password})
     });
     if(!body?.access_token)throw new Error("Supabase 未回傳登入 Token。");
@@ -277,15 +278,96 @@ function filterLifecycle(){
 }
 function inspectionPage(){
  const target=devices.filter(x=>x.state==="送檢充電"||x.state==="充電中"||x.state==="待修"||x.state==="修理中"||x.state==="待驗");
- document.getElementById("content").innerHTML=`<div class="cards">${card("送檢中",devices.filter(x=>x.state==="送檢充電").length,"info")}${card("充電中",devices.filter(x=>x.state==="充電中").length,"info")}${card("待修",devices.filter(x=>x.state==="待修").length,"warning")}${card("修理中",devices.filter(x=>x.state==="修理中").length,"warning")}${card("待驗",devices.filter(x=>x.state==="待驗").length,"warning")}${card("報廢",devices.filter(x=>x.state==="報廢").length,"danger")}</div><div class="panel"><h2>檢修工作台</h2>${target.length?deviceTable(target,true):'<div class="empty">目前沒有檢修中設備</div>'}</div>`;
+ document.getElementById("content").innerHTML=`<div class="cards">${card("送檢中",devices.filter(x=>x.state==="送檢充電").length,"info")}${card("充電中",devices.filter(x=>x.state==="充電中").length,"info")}${card("待修",devices.filter(x=>x.state==="待修").length,"warning")}${card("修理中",devices.filter(x=>x.state==="修理中").length,"warning")}${card("待驗",devices.filter(x=>x.state==="待驗").length,"warning")}${card("報廢",devices.filter(x=>x.state==="報廢").length,"danger")}</div><div class="panel"><div class="notice">檢修週期以「開單送檢修日」為基準計算6個月。送檢後顯示的下一週期日＝送檢日＋6個月；完成充電後則由實際完成充電日重新起算6個月。</div><h2>檢修工作台</h2>${target.length?inspectionTable(target):'<div class="empty">目前沒有檢修中設備</div>'}</div>`;
+}
+function inspectionTable(list){
+ return `<div class="table-wrap"><table><thead><tr><th>料號</th><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>開單送檢日</th><th>送檢日起算6個月</th><th>單號</th><th>操作</th></tr></thead><tbody>${list.map(x=>{
+   const s=statusOf(x), target=x.send_date?addMonths(x.send_date,6):x.next_charge_date;
+   return `<tr><td>${esc(x.material_no)}</td><td><b>${esc(x.taipower_no)}</b></td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(x.send_date)}</td><td>${fmt(target)}</td><td>${esc(x.transfer_no||"-")}</td><td><button class="btn small secondary" type="button" onclick="detail('${x.id}')">查看</button></td></tr>`;
+ }).join("")}</tbody></table></div>`;
 }
 function exceptionsPage(){
  const data=devices.map(x=>({x,r:riskOf(x),s:statusOf(x)})).filter(o=>o.r.label==="高"||o.s.label==="逾期"||o.s.label==="即將到期");
  document.getElementById("content").innerHTML=`<div class="cards">${card("高風險",data.filter(o=>o.r.label==="高").length,"danger")}${card("逾期",data.filter(o=>o.s.label==="逾期").length,"danger")}${card("30日內",data.filter(o=>o.s.label==="即將到期").length,"warning")}${card("資料異常",0)}${card("檢修超時",0)}${card("待處理",data.length,"info")}</div><div class="panel"><h2>異常與風險清單</h2><div class="table-wrap"><table><thead><tr><th>設備</th><th>異常</th><th>健康度</th><th>風險</th><th>建議</th><th>操作</th></tr></thead><tbody>${data.map(o=>`<tr><td><b>${esc(o.x.taipower_no)}</b></td><td>${o.s.label==="逾期"?"逾期充電":o.s.label==="即將到期"?"近期應充電":"設備健康度偏低"}</td><td>${healthScore(o.x)}</td><td><span class="badge ${o.r.cls}">${o.r.label}</span></td><td>${o.s.label==="逾期"?"立即建立送檢":o.x.health_score<70?"優先檢修":"預排充電"}</td><td><button class="btn small secondary" type="button" onclick="detail('${o.x.id}')">查看</button></td></tr>`).join("")}</tbody></table></div></div>`;
 }
 async function documentsPage(){
-  document.getElementById("content").innerHTML=`<div class="panel"><h2>移撥單／文件管理</h2><div class="toolbar"><input id="docq" placeholder="搜尋移撥單號／台電編號／料號" oninput="filterTransferOrders()"><span class="muted">移撥單號由作業人員在「送檢充電」時自行輸入，系統只負責彙整與查詢，不自動產生假文件。</span></div><div class="notice">一張移撥單可對應多具開關。點選移撥單號後，依台電編號（公司編號）列出實際移撥給檢修課的設備與數量。</div><div id="transferOrderArea"><div class="empty">讀取移撥單資料中…</div></div></div><div class="panel"><h2>文件資料</h2><div class="notice">正式文件應由使用者實際上傳，並與設備或移撥事件綁定。系統不應自行產生 PDF、假檔名或虛構文件。</div><div class="toolbar"><button class="btn secondary" type="button" onclick="alert('文件上傳功能請在文件儲存空間建立後啟用；目前頁面不會自動建立任何文件。')">＋ 上傳文件</button></div></div>`;
-  await loadTransferOrders();
+  document.getElementById("content").innerHTML=`<div class="panel"><h2>移撥單／文件管理</h2><div class="toolbar"><input id="docq" placeholder="搜尋移撥單號／台電編號／料號" oninput="filterTransferOrders()"><span class="muted">移撥單號由作業人員在「送檢充電」時自行輸入；正式文件由使用者實際上傳，不由系統虛構。</span></div><div class="notice">一張移撥單可對應多具開關。點選移撥單號後，依台電編號（公司編號）列出實際移撥給檢修課的設備與數量。</div><div id="transferOrderArea"><div class="empty">讀取移撥單資料中…</div></div></div><div class="panel"><h2>文件資料</h2><div class="notice">上傳後，原始檔案存放於 Supabase Storage 私有儲存空間，並以移撥單號／設備／文件類型建立可追溯紀錄。</div><div class="toolbar"><button class="btn secondary" type="button" onclick="openUploadDocument()">＋ 上傳文件</button></div><div id="documentArea"><div class="empty">讀取文件資料中…</div></div></div>`;
+  await Promise.all([loadTransferOrders(),loadDocuments()]);
+}
+
+async function storageUpload(file, path){
+  if(!session?.access_token) throw new Error("登入狀態已失效，請重新登入。");
+  const response=await fetch(`${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(STORAGE_BUCKET)}/${path.split('/').map(encodeURIComponent).join('/')}`,{
+    method:'POST',
+    headers:{
+      apikey:asciiHeader(SUPABASE_KEY),
+      Authorization:asciiHeader('Bearer '+session.access_token),
+      'Content-Type':file.type||'application/octet-stream',
+      'x-upsert':'false'
+    },
+    body:file
+  });
+  const text=await response.text();
+  let body=null;try{body=text?JSON.parse(text):null}catch{}
+  if(!response.ok) throw new Error(body?.message||body?.error||text||`Storage HTTP ${response.status}`);
+  return body;
+}
+
+async function loadDocuments(){
+  const area=document.getElementById('documentArea');
+  try{
+    const rows=await api('/rest/v1/documents?select=*&order=uploaded_at.desc&limit=300',{headers:{'Accept-Profile':'public'}});
+    renderDocuments(rows||[]);
+  }catch(e){
+    if(area)area.innerHTML=`<div class="notice danger">文件資料查詢失敗：${esc(errText(e))}</div>`;
+  }
+}
+
+function renderDocuments(rows){
+  const area=document.getElementById('documentArea');if(!area)return;
+  if(!rows.length){area.innerHTML='<div class="empty">尚無文件。請使用「＋ 上傳文件」建立第一筆正式文件。</div>';return;}
+  const q=(document.getElementById('docq')?.value||'').trim().toLowerCase();
+  const filtered=rows.filter(r=>!q||[r.transfer_no,r.file_name,r.document_type,r.uploaded_email,r.note].join(' ').toLowerCase().includes(q));
+  area.innerHTML=filtered.length?`<div class="table-wrap"><table><thead><tr><th>移撥單號</th><th>設備</th><th>文件類型</th><th>檔名</th><th>上傳者</th><th>時間</th><th>狀態</th></tr></thead><tbody>${filtered.map(r=>{const d=devices.find(x=>x.id===r.switch_id);return `<tr><td>${esc(r.transfer_no||'-')}</td><td>${esc(d?.taipower_no||'-')}</td><td>${esc(r.document_type)}</td><td><button class="linkbtn" type="button" onclick="openDocument('${r.id}')">${esc(r.file_name)}</button></td><td>${esc(r.uploaded_email||'-')}</td><td>${r.uploaded_at?new Date(r.uploaded_at).toLocaleString('zh-TW'):'-'}</td><td><span class="badge normal">有效</span></td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">沒有符合條件的文件。</div>';
+}
+
+function openUploadDocument(){
+  const transferOptions=transferOrderData.map(o=>`<option value="${esc(o.transfer_no)}">${esc(o.transfer_no)}（${o.count}具）</option>`).join('');
+  const deviceOptions=devices.map(d=>`<option value="${d.id}">${esc(d.taipower_no)}｜${esc(d.material_no)}｜${esc(d.type)}</option>`).join('');
+  document.body.insertAdjacentHTML('beforeend',`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>上傳正式文件</h2><button class="close" type="button" onclick="closeModal()">×</button></div><div class="form-grid"><div class="full"><label>檔案 *</label><input id="df" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"></div><div><label>文件類型 *</label><select id="dt"><option>移撥單</option><option>充電紀錄</option><option>檢修報告</option><option>不能修理證明</option><option>驗收紀錄</option><option>其他</option></select></div><div><label>移撥單號（可選）</label><select id="dtr"><option value="">— 不指定 —</option>${transferOptions}</select></div><div class="full"><label>關聯設備（可選）</label><select id="ds"><option value="">— 不指定單一設備 —</option>${deviceOptions}</select></div><div class="full"><label>備註</label><textarea id="dn" placeholder="例如：TR250227001 原件掃描"></textarea></div></div><div class="notice">檔案會上傳至私有 Storage；系統不會自行建立 PDF 或假文件。</div><div id="uploadMsg" class="notice danger" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" type="button" onclick="uploadDocument()">開始上傳</button></div></div></div>`);
+}
+
+async function uploadDocument(){
+  const file=document.getElementById('df')?.files?.[0];
+  const type=document.getElementById('dt')?.value||'其他';
+  const transfer=(document.getElementById('dtr')?.value||'').trim();
+  const switchId=(document.getElementById('ds')?.value||'').trim();
+  const note=(document.getElementById('dn')?.value||'').trim();
+  if(!file){showUploadMsg('請先選擇要上傳的檔案。');return;}
+  if(file.size>50*1024*1024){showUploadMsg('單一檔案上限為 50 MB。');return;}
+  const safeName=file.name.replace(/[^a-zA-Z0-9._-]+/g,'_');
+  const safeTransfer=(transfer||'general').replace(/[^a-zA-Z0-9_-]+/g,'_');
+  const path=`${safeTransfer}/${Date.now()}_${crypto.randomUUID()}_${safeName}`;
+  try{
+    await storageUpload(file,path);
+    await api('/rest/v1/documents',{method:'POST',headers:{'Accept-Profile':'public','Prefer':'return=minimal'},body:JSON.stringify({switch_id:switchId||null,document_type:type,file_name:file.name,storage_path:path,transfer_no:transfer||null,event_type:transfer?'移撥單':'文件',uploaded_by:session?.user?.id||null,uploaded_email:session?.user?.email||null,note:note||null})});
+    closeModal();await loadDocuments();alert(`文件上傳完成：${file.name}`);
+  }catch(e){showUploadMsg('上傳失敗：'+errText(e));}
+}
+function showUploadMsg(m){const e=document.getElementById('uploadMsg');if(e){e.textContent=m;e.style.display='block';}}
+
+async function openDocument(id){
+  try{
+    const rows=await api('/rest/v1/documents?select=*&id=eq.'+encodeURIComponent(id)+'&limit=1',{headers:{'Accept-Profile':'public'}});
+    const d=rows?.[0];if(!d?.storage_path)throw new Error('找不到文件儲存路徑。');
+    const response=await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${encodeURIComponent(STORAGE_BUCKET)}/${d.storage_path.split('/').map(encodeURIComponent).join('/')}`,{method:'POST',headers:{apikey:asciiHeader(SUPABASE_KEY),Authorization:asciiHeader('Bearer '+session.access_token),'Content-Type':'application/json'},body:JSON.stringify({expiresIn:1800})});
+    const text=await response.text();let body=null;try{body=text?JSON.parse(text):null}catch{}
+    if(!response.ok)throw new Error(body?.message||body?.error||text||'無法建立文件連結');
+    const signed=body?.signedURL||body?.signedUrl||body?.signed_url;
+    if(!signed)throw new Error('Storage 未回傳簽名網址。');
+    const url=signed.startsWith('http')?signed:SUPABASE_URL+'/storage/v1'+signed;
+    window.open(url,'_blank','noopener');
+  }catch(e){alert('開啟文件失敗：'+errText(e));}
 }
 
 let transferOrderData=[];
