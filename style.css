@@ -17,6 +17,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .muted{color:#6c778b;font-size:13px}
 .cards{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:12px;margin-bottom:20px}
 .card{background:#fff;border:1px solid #e3e8f0;border-radius:12px;padding:16px;box-shadow:0 3px 12px rgba(23,32,51,.04)}
+.kpi-click{width:100%;appearance:none;transition:transform .12s ease,box-shadow .12s ease}.kpi-click:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(23,32,51,.08)}.kpi-hint{font-size:11px;color:#8a94a6;margin-top:8px}.group-panel{background:#fff;border:1px solid #e3e8f0;border-radius:12px;margin-bottom:14px;overflow:hidden}.group-head{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 16px;background:#f7f9fc;border-bottom:1px solid #e9edf3}.group-head strong{font-size:15px}
 .card .label{font-size:12px;color:#6b7688}
 .card .num{font-size:28px;font-weight:800;margin-top:7px}
 .warning .num{color:#a26c00}.danger .num{color:#bd2d38}.info .num{color:#365b91}.success .num{color:#25764c}
