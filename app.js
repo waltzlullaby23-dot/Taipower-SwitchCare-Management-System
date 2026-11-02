@@ -1,4 +1,4 @@
-/* SwitchCare Enterprise v11.7
+/* SwitchCare Enterprise v11.8
    Professional enterprise rebuild:
    - Direct Supabase REST API with ASCII-safe request headers
    - No supabase-js Auth dependency
@@ -17,6 +17,7 @@ const CYCLE_MONTHS = Number(CFG.CYCLE_MONTHS || 6);
 const REMIND_DAYS = Number(CFG.REMIND_DAYS || 30);
 const SESSION_KEY = cleanText(CFG.SESSION_STORAGE_KEY || "switchcare_session_v11");
 const STORAGE_BUCKET = cleanText(CFG.STORAGE_BUCKET || "switchcare-documents");
+const AUTH_REDIRECT_URL = "https://waltzlullaby23-dot.github.io/Taipower-SwitchCare-Management-System/";
 const CONFIG_OK = /^https:\/\/[^\s]+\.supabase\.co$/i.test(SUPABASE_URL)
   && /^sb_publishable_[A-Za-z0-9_\-.]+$/.test(SUPABASE_KEY);
 
@@ -122,6 +123,9 @@ async function refreshSession(){
 async function boot(){
   render();
   if(!CONFIG_OK){renderSetup();return;}
+  // Recovery callback must be handled before loading any previously saved session.
+  const handled = await handleAuthCallback();
+  if(handled) return;
   session=loadSession();
   if(session?.access_token){
     if(session.expires_at && Number(session.expires_at)*1000 < Date.now()+60000){
@@ -154,18 +158,142 @@ function renderSetup(){
 Key格式：${SUPABASE_KEY.startsWith("sb_publishable_")?"正確":"未設定／格式錯誤"}</div>
   </div></div>`;
 }
-function renderLogin(){
+function renderLogin(message="", messageType="warning"){
   document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card">
   <h1>SWITCHCARE</h1><div class="sub">台電自動線路開關生命週期管理系統</div>
+  ${message?`<div class="notice ${messageType}" style="margin:14px 0">${esc(message)}</div>`:""}
   <label>Email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="Email">
   <label>密碼</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="密碼">
   <div id="loginError" class="auth-error" style="display:none"></div>
   <button id="loginBtn" class="btn" type="button">登入系統</button>
+  <button id="forgotPasswordBtn" class="btn secondary" style="width:100%;margin-top:10px" type="button">忘記密碼？</button>
   </div></div>`;
   document.getElementById("loginBtn").onclick=signIn;
+  document.getElementById("forgotPasswordBtn").onclick=()=>renderForgotPassword(document.getElementById("loginEmail")?.value||"");
   document.getElementById("loginPassword").addEventListener("keydown",e=>{if(e.key==="Enter")signIn()});
 }
 function showLoginError(msg){const e=document.getElementById("loginError");if(e){e.textContent=msg;e.style.display="block";}}
+function clearAuthUrl(){
+  try{history.replaceState({},document.title,window.location.pathname);}catch{}
+}
+async function handleAuthCallback(){
+  const hash = new URLSearchParams((window.location.hash||"").replace(/^#/,""));
+  const query = new URLSearchParams(window.location.search||"");
+  const errorCode = hash.get("error_code") || query.get("error_code");
+  const errorDescription = hash.get("error_description") || query.get("error_description");
+  if(errorCode || errorDescription){
+    clearAuthUrl();
+    renderLogin(errorCode==="otp_expired" ? "密碼重設連結已過期或已使用，請重新申請一封新的重設郵件。" : `驗證連結無法使用：${errorDescription||errorCode||"未知錯誤"}`);
+    return true;
+  }
+
+  let authData = null;
+  const accessToken = hash.get("access_token");
+  const refreshToken = hash.get("refresh_token");
+  const callbackType = hash.get("type") || query.get("type");
+  if(accessToken && callbackType === "recovery"){
+    authData = {
+      access_token: accessToken,
+      refresh_token: refreshToken || "",
+      token_type: hash.get("token_type") || "bearer",
+      expires_in: Number(hash.get("expires_in") || 3600),
+      expires_at: Number(hash.get("expires_at") || 0) || Math.floor(Date.now()/1000)+Number(hash.get("expires_in")||3600)
+    };
+  }else if(query.get("token_hash") && callbackType === "recovery"){
+    try{
+      authData = await authRequest("/auth/v1/verify",{method:"POST",body:JSON.stringify({token_hash:query.get("token_hash"),type:"recovery"})});
+    }catch(e){
+      clearAuthUrl();
+      renderLogin("重設連結無效或已過期，請重新申請密碼重設郵件。");
+      return true;
+    }
+  }else if(query.get("code")){
+    clearAuthUrl();
+    renderLogin("收到 PKCE 驗證碼，但目前這版程式未使用 PKCE 驗證流程。請重新從登入頁申請密碼重設；若仍發生此訊息，需檢查 Supabase Email Template 的連結格式。");
+    return true;
+  }
+
+  if(!authData?.access_token) return false;
+  session = authData;
+  try{
+    const user = await api("/auth/v1/user",{method:"GET"});
+    session.user = user;
+    clearAuthUrl();
+    renderResetPassword();
+  }catch(e){
+    session = null;
+    clearAuthUrl();
+    renderLogin("無法驗證這個重設連結，可能已過期或已使用。請重新申請。");
+  }
+  return true;
+}
+async function authRequest(path,options={}){
+  const headers = new Headers({"apikey":asciiHeader(SUPABASE_KEY),"Content-Type":"application/json","Accept":"application/json"});
+  const response = await fetch(SUPABASE_URL+path,{...options,headers});
+  const raw = await response.text();
+  let data = null; try{data=raw?JSON.parse(raw):null}catch{data=raw;}
+  if(!response.ok) throw new Error(data?.msg||data?.message||data?.error_description||data?.error||raw||`HTTP ${response.status}`);
+  return data;
+}
+function renderForgotPassword(prefillEmail=""){
+  document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card">
+  <h1>SWITCHCARE</h1><div class="sub">密碼復原</div>
+  <p class="muted">輸入註冊時使用的 Email，系統會寄送一次性密碼重設連結。</p>
+  <label>Email</label><input id="recoveryEmail" type="email" autocomplete="email" placeholder="Email" value="${esc(prefillEmail)}">
+  <div id="recoveryMessage" class="auth-error" style="display:none"></div>
+  <button id="sendRecoveryBtn" class="btn" type="button">寄送重設密碼郵件</button>
+  <button id="backLoginBtn" class="btn secondary" style="width:100%;margin-top:10px" type="button">返回登入</button>
+  </div></div>`;
+  document.getElementById("sendRecoveryBtn").onclick=sendPasswordRecovery;
+  document.getElementById("backLoginBtn").onclick=()=>renderLogin();
+}
+async function sendPasswordRecovery(){
+  const email=(document.getElementById("recoveryEmail")?.value||"").trim();
+  const message=document.getElementById("recoveryMessage");
+  const btn=document.getElementById("sendRecoveryBtn");
+  if(!validEmail(email)){message.textContent="請輸入有效的 Email。";message.style.display="block";return;}
+  btn.disabled=true;btn.textContent="寄送中…";
+  try{
+    const path="/auth/v1/recover?redirect_to="+encodeURIComponent(AUTH_REDIRECT_URL);
+    await authRequest(path,{method:"POST",body:JSON.stringify({email})});
+    message.className="notice success";
+    message.textContent="如果此 Email 已註冊，系統將寄送密碼重設郵件。請檢查收件匣及垃圾郵件匣；請使用最新收到的郵件，舊連結可能已失效。";
+    message.style.display="block";
+  }catch(e){
+    message.className="auth-error";message.textContent="寄送失敗："+errText(e);message.style.display="block";
+  }finally{btn.disabled=false;btn.textContent="寄送重設密碼郵件";}
+}
+function renderResetPassword(){
+  document.getElementById("app").innerHTML=`<div class="auth-wrap"><div class="auth-card">
+  <h1>SWITCHCARE</h1><div class="sub">設定新密碼</div>
+  <p class="muted">已驗證密碼重設連結。請設定新的登入密碼。</p>
+  <label>新密碼</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="至少 8 個字元">
+  <label>確認新密碼</label><input id="confirmNewPassword" type="password" autocomplete="new-password" placeholder="再次輸入新密碼">
+  <div id="resetPasswordMessage" class="auth-error" style="display:none"></div>
+  <button id="updatePasswordBtn" class="btn" type="button">更新密碼</button>
+  </div></div>`;
+  document.getElementById("updatePasswordBtn").onclick=updateRecoveredPassword;
+}
+async function updateRecoveredPassword(){
+  const password=document.getElementById("newPassword")?.value||"";
+  const confirm=document.getElementById("confirmNewPassword")?.value||"";
+  const message=document.getElementById("resetPasswordMessage");
+  const btn=document.getElementById("updatePasswordBtn");
+  if(password.length<8){message.textContent="新密碼至少需要 8 個字元。";message.style.display="block";return;}
+  if(password!==confirm){message.textContent="兩次輸入的密碼不一致。";message.style.display="block";return;}
+  btn.disabled=true;btn.textContent="更新中…";
+  try{
+    await api("/auth/v1/user",{method:"PUT",body:JSON.stringify({password})});
+    try{await api("/auth/v1/logout",{method:"POST"});}catch{}
+    saveSession(null);
+    clearAuthUrl();
+    renderLogin("密碼已成功更新。請使用新密碼登入 SwitchCare。","success");
+  }catch(e){
+    message.textContent="密碼更新失敗："+errText(e);message.style.display="block";
+  }finally{
+    if(document.getElementById("updatePasswordBtn")){btn.disabled=false;btn.textContent="更新密碼";}
+  }
+}
 async function signIn(){
   if(!CONFIG_OK){showLoginError("Supabase 設定未完成。");return;}
   const email=(document.getElementById("loginEmail")?.value||"").trim();
@@ -177,7 +305,7 @@ async function signIn(){
   try{
     const body=await api("/auth/v1/token?grant_type=password",{
       method:"POST",
-      headers:{"X-Client-Info":"switchcare-v11.6"},
+      headers:{"X-Client-Info":"switchcare-v11.8"},
       body:JSON.stringify({email,password})
     });
     if(!body?.access_token)throw new Error("Supabase 未回傳登入 Token。");
@@ -199,7 +327,7 @@ function pageTitle(){return({dashboard:"設備生命週期戰情中心",switches
 function go(p){page=p;renderLayout();render();}
 function renderLayout(){
   document.getElementById("app").innerHTML=`<div class="app">
-  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v11.3｜生命週期・充電・移撥・稽核</small></div>
+  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v11.8｜生命週期・充電・移撥・稽核</small></div>
   <nav class="nav">${nav("dashboard","儀表板")}${nav("switches","開關設備主檔")}${nav("charging","充電與週期管理")}${nav("usage","領用／退庫管理")}${nav("lifecycle","履歷週期")}${nav("inspection","檢修管理")}${nav("exceptions","異常與風險中心")}${nav("documents","移撥單／文件管理")}${nav("reports","報表與稽核")}${nav("settings","系統設定")}</nav></aside>
   <main class="main"><div class="topbar"><div><h1>${pageTitle()}</h1><span class="muted">在庫計時｜領用停止｜退庫重新起算6個月｜履歷／檢修／稽核</span></div>
   <div style="display:flex;align-items:center;gap:10px">${page!=="settings"?`<button class="btn" type="button" onclick="openDevice()">＋ 新增開關</button>`:""}<span class="userbar">${esc(session?.user?.email||"")}</span><button class="btn secondary small" type="button" onclick="signOut()">登出</button></div></div><div id="content"></div></main></div>`;
