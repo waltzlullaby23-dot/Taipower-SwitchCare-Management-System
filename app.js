@@ -1,4 +1,4 @@
-/* SwitchCare Enterprise v11.8
+/* SwitchCare Enterprise v11.9
    Professional enterprise rebuild:
    - Direct Supabase REST API with ASCII-safe request headers
    - No supabase-js Auth dependency
@@ -305,7 +305,7 @@ async function signIn(){
   try{
     const body=await api("/auth/v1/token?grant_type=password",{
       method:"POST",
-      headers:{"X-Client-Info":"switchcare-v11.8"},
+      headers:{"X-Client-Info":"switchcare-v11.9"},
       body:JSON.stringify({email,password})
     });
     if(!body?.access_token)throw new Error("Supabase 未回傳登入 Token。");
@@ -327,7 +327,7 @@ function pageTitle(){return({dashboard:"設備生命週期戰情中心",switches
 function go(p){page=p;renderLayout();render();}
 function renderLayout(){
   document.getElementById("app").innerHTML=`<div class="app">
-  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v11.8｜生命週期・充電・移撥・稽核</small></div>
+  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v11.9｜履歷週期・充電・移撥・稽核</small></div>
   <nav class="nav">${nav("dashboard","儀表板")}${nav("switches","開關設備主檔")}${nav("charging","充電與週期管理")}${nav("usage","領用／退庫管理")}${nav("lifecycle","履歷週期")}${nav("inspection","檢修管理")}${nav("exceptions","異常與風險中心")}${nav("documents","移撥單／文件管理")}${nav("reports","報表與稽核")}${nav("settings","系統設定")}</nav></aside>
   <main class="main"><div class="topbar"><div><h1>${pageTitle()}</h1><span class="muted">在庫計時｜領用停止｜退庫重新起算6個月｜履歷／檢修／稽核</span></div>
   <div style="display:flex;align-items:center;gap:10px">${page!=="settings"?`<button class="btn" type="button" onclick="openDevice()">＋ 新增開關</button>`:""}<span class="userbar">${esc(session?.user?.email||"")}</span><button class="btn secondary small" type="button" onclick="signOut()">登出</button></div></div><div id="content"></div></main></div>`;
@@ -374,7 +374,7 @@ function deviceTable(list,showDays=false){
  </tbody></table></div>`;
 }
 function dashboard(){
-  const stock=devices.filter(x=>x.state==="在庫"),issued=devices.filter(x=>x.state==="領用中"),transferOut=devices.filter(x=>x.state==="移撥出"),transferIn=devices.filter(x=>x.transfer_direction==="移撥入"&&x.state==="在庫"),soon=stock.filter(x=>statusOf(x).label==="即將到期"),over=stock.filter(x=>statusOf(x).label==="逾期"),proc=devices.filter(x=>["送檢充電","充電中"].includes(x.state));
+  const stock=devices.filter(x=>x.state==="在庫"),issued=devices.filter(x=>x.state==="領用中"),transferOut=devices.filter(x=>x.state==="移撥出"),transferIn=devices.filter(x=>x.transfer_direction==="移撥入"&&!["移撥出","報廢","遺失"].includes(x.state)),soon=stock.filter(x=>statusOf(x).label==="即將到期"),over=stock.filter(x=>statusOf(x).label==="逾期"),proc=devices.filter(x=>["送檢充電","充電中"].includes(x.state));
   const high=devices.filter(x=>riskOf(x).label==="高");
   const avg=devices.length?Math.round(devices.reduce((a,x)=>a+healthScore(x),0)/devices.length):0;
   document.getElementById("content").innerHTML=`<div class="cards">
@@ -397,7 +397,7 @@ function showDashboardList(kind){
   if(kind==="stock"){list=list.filter(x=>x.state==="在庫");title="目前在庫設備";}
   else if(kind==="issued"){list=list.filter(x=>x.state==="領用中");title="領用中設備";}
   else if(kind==="transferOut"){list=list.filter(x=>x.state==="移撥出");title="移撥出設備（所有權已移轉）";}
-  else if(kind==="transferIn"){list=list.filter(x=>x.transfer_direction==="移撥入"&&x.state==="在庫");title="移撥入設備（本處接收）";}
+  else if(kind==="transferIn"){list=list.filter(x=>x.transfer_direction==="移撥入"&&!["移撥出","報廢","遺失"].includes(x.state));title="移撥入設備（本處接收）";}
   else if(kind==="soon"){list=list.filter(x=>statusOf(x).label==="即將到期");title="30天內到期設備";}
   else if(kind==="overdue"){list=list.filter(x=>statusOf(x).label==="逾期");title="逾期設備";}
   else if(kind==="process"){list=list.filter(x=>["送檢充電","充電中"].includes(x.state));title="送檢／充電設備";}
@@ -578,7 +578,7 @@ function chargingPage(){
   document.getElementById("content").innerHTML=`<div class="notice">在庫設備以入帳／退庫／完成充電日計算6個月；一旦開單送檢，檢修中的目前週期改以「開單送檢修日」起算6個月；領用期間停止倒數。</div><div class="panel"><div class="toolbar"><button class="btn" type="button" onclick="batchSend()">批次送檢</button></div>${l.length?deviceTable(l,true):'<div class="empty">目前沒有需要處理的設備</div>'}</div>`;
 }
 function usagePage(){
- const i=devices.filter(x=>x.state==="領用中"),s=devices.filter(x=>x.state==="在庫"),o=devices.filter(x=>x.state==="移撥出"),incoming=devices.filter(x=>x.transfer_direction==="移撥入"&&x.state==="在庫");
+ const i=devices.filter(x=>x.state==="領用中"),s=devices.filter(x=>x.state==="在庫"),o=devices.filter(x=>x.state==="移撥出"),incoming=devices.filter(x=>x.transfer_direction==="移撥入"&&!["移撥出","報廢","遺失"].includes(x.state));
  document.getElementById("content").innerHTML=`<div class="notice">領用期間停止充電倒數，領用備註保留於各筆領用履歷。移撥出後所有權歸接收單位，不列入本處在庫或領用中；移撥入後納入本處管理，依移撥入日期重新起算6個月。</div>
  <div class="panel"><h2>目前領用中（${i.length}）</h2>${i.length?deviceTable(i):'<div class="empty">目前沒有領用中的設備</div>'}</div>
  <div class="panel"><h2>移撥出設備（${o.length}）</h2>${o.length?deviceTable(o):'<div class="empty">目前沒有移撥出設備</div>'}</div>
