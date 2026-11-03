@@ -71,7 +71,7 @@ begin
  if v_old.state not in ('移撥出','移撥中') then raise exception '僅已移撥至外單位的設備可以辦理移撥入'; end if;
  if coalesce(trim(p_source_unit),'')='' then raise exception '移撥來源區處／單位不可空白'; end if;
  v_due:=(p_event_date+interval '6 months')::date;
- update public.switches set state='在庫',ownership_unit='本處',transfer_direction='移撥入',transfer_date=p_event_date,transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,cycle_start_date=p_event_date,next_charge_date=v_due,return_date=p_event_date,issue_date=null,issue_no=null,send_date=null,transfer_no=null where id=p_switch_id returning * into v_new;
+ update public.switches set state='在庫',ownership_unit='本處',transfer_direction='移撥入',transfer_date=p_event_date,transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,cycle_start_date=p_event_date,next_charge_date=v_due,return_date=p_event_date,issue_date=null,issue_no=null,send_date=null,transfer_no=null,active_usage_note=null,active_recipient_unit=null where id=p_switch_id returning * into v_new;
  select coalesce(max(cycle_no),0)+1 into v_cycle from public.charge_records where switch_id=p_switch_id;
  insert into public.charge_records(switch_id,cycle_no,start_date,due_date,status,note) values(p_switch_id,v_cycle,p_event_date,v_due,'待充電','移撥入本處，依移撥入日期重新起算6個月');
  insert into public.usage_records(switch_id,issue_date,issue_no,return_date,status,note,event_kind,recipient_unit,transfer_document_no) values(p_switch_id,p_event_date,nullif(trim(p_document_no),''),p_event_date,'已移撥',p_note,'移撥入','本處',nullif(trim(p_document_no),''));
