@@ -60,9 +60,9 @@ begin
  if v_old.state<>'在庫' then raise exception '僅本處在庫設備可以辦理移撥出'; end if;
  if coalesce(trim(p_recipient_unit),'')='' then raise exception '接收區處／單位不可空白'; end if;
  if p_event_date>current_date then raise exception '移撥日期不可晚於今天'; end if;
- update public.switches set state='移撥出',ownership_unit=trim(p_recipient_unit),transfer_direction='移撥出',transfer_date=p_event_date,transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,cycle_start_date=null,next_charge_date=null,send_date=null,transfer_no=null,active_usage_note=null,active_recipient_unit=null where id=p_switch_id returning * into v_new;
+ update public.switches set state='移撥出',ownership_unit=trim(p_recipient_unit),transfer_direction='移撥出',transfer_date=p_event_date,transfer_source_unit='本處',transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,cycle_start_date=null,next_charge_date=null,send_date=null,transfer_no=null,active_usage_note=null,active_recipient_unit=null where id=p_switch_id returning * into v_new;
  update public.charge_records set status='因領用中止',note=coalesce(note,'因移撥出停止本處充電週期') where switch_id=p_switch_id and status='待充電';
- insert into public.usage_records(switch_id,issue_date,issue_no,status,note,event_kind,recipient_unit,transfer_document_no) values(p_switch_id,p_event_date,nullif(trim(p_document_no),''),'已移撥',p_note,'移撥出',trim(p_recipient_unit),nullif(trim(p_document_no),''));
+ insert into public.usage_records(switch_id,issue_date,issue_no,status,note,event_kind,recipient_unit,transfer_document_no,source_unit) values(p_switch_id,p_event_date,nullif(trim(p_document_no),''),'已移撥',p_note,'移撥出',trim(p_recipient_unit),nullif(trim(p_document_no),''),'本處');
  perform public.log_event(v_new,'移撥出',nullif(trim(p_document_no),''),concat('所有權移轉至 ',trim(p_recipient_unit),case when coalesce(trim(p_note),'')<>'' then '；'||p_note else '' end),to_jsonb(v_old),to_jsonb(v_new));
 end; $$;
 
