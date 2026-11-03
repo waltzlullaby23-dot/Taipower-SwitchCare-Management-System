@@ -39,7 +39,7 @@ begin
  select * into v_old from public.switches where id=p_switch_id for update;
  if not found then raise exception '設備不存在'; end if;
  if v_old.state<>'領用中' then raise exception '目前不是領用中狀態，無法退庫'; end if;
- if p_event_date>current_date then raise exception '退庫日期不可晚於今天'; end if;
+ if p_event_date is null or p_event_date>current_date then raise exception '退庫日期不可空白或晚於今天'; end if;
  if v_old.issue_date is not null and p_event_date<v_old.issue_date then raise exception '退庫日期不可早於領用日期'; end if;
  update public.switches set state='在庫',return_date=p_event_date,cycle_start_date=p_event_date,next_charge_date=(p_event_date+interval '6 months')::date,issue_no=coalesce(p_document_no,issue_no),send_date=null,transfer_no=null where id=p_switch_id returning * into v_new;
  select * into v_usage from public.usage_records where switch_id=p_switch_id and status='領用中' and event_kind='領用' order by issue_date desc limit 1 for update;
@@ -59,7 +59,8 @@ begin
  if not found then raise exception '設備不存在'; end if;
  if v_old.state<>'在庫' then raise exception '僅本處在庫設備可以辦理移撥出'; end if;
  if coalesce(trim(p_recipient_unit),'')='' then raise exception '接收區處／單位不可空白'; end if;
- if p_event_date>current_date then raise exception '移撥日期不可晚於今天'; end if;
+ if p_event_date is null or p_event_date>current_date then raise exception '移撥日期不可空白或晚於今天'; end if;
+ if v_old.entry_date is not null and p_event_date<v_old.entry_date then raise exception '移撥日期不可早於設備入帳日期'; end if;
  update public.switches set state='移撥出',ownership_unit=trim(p_recipient_unit),transfer_direction='移撥出',transfer_date=p_event_date,transfer_source_unit='本處',transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,cycle_start_date=null,next_charge_date=null,send_date=null,transfer_no=null,active_usage_note=null,active_recipient_unit=null where id=p_switch_id returning * into v_new;
  update public.charge_records set status='因領用中止',note=coalesce(note,'因移撥出停止本處充電週期') where switch_id=p_switch_id and status='待充電';
  insert into public.usage_records(switch_id,issue_date,issue_no,status,note,event_kind,recipient_unit,transfer_document_no,source_unit) values(p_switch_id,p_event_date,nullif(trim(p_document_no),''),'已移撥',p_note,'移撥出',trim(p_recipient_unit),nullif(trim(p_document_no),''),'本處');
@@ -74,7 +75,8 @@ begin
  if not found then raise exception '設備不存在'; end if;
  if v_old.state not in ('移撥出','移撥中') then raise exception '僅已移撥至外單位的設備可以辦理移撥入'; end if;
  if coalesce(trim(p_source_unit),'')='' then raise exception '移撥來源區處／單位不可空白'; end if;
- if p_event_date>current_date then raise exception '移撥入日期不可晚於今天'; end if;
+ if p_event_date is null or p_event_date>current_date then raise exception '移撥入日期不可空白或晚於今天'; end if;
+ if v_old.transfer_date is not null and p_event_date<v_old.transfer_date then raise exception '移撥入日期不可早於前次移撥日期'; end if;
  v_due:=(p_event_date+interval '6 months')::date;
  update public.switches set state='在庫',ownership_unit='本處',transfer_direction='移撥入',transfer_date=p_event_date,transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,transfer_source_unit=trim(p_source_unit),cycle_start_date=p_event_date,next_charge_date=v_due,return_date=p_event_date,issue_date=null,issue_no=null,send_date=null,transfer_no=null,active_usage_note=null,active_recipient_unit=null where id=p_switch_id returning * into v_new;
  select coalesce(max(cycle_no),0)+1 into v_cycle from public.charge_records where switch_id=p_switch_id;
@@ -99,7 +101,7 @@ begin
  select * into v_old from public.switches where id=p_switch_id for update;
  if not found then raise exception '設備不存在'; end if;
  if v_old.state<>'在庫' then raise exception '目前不是在庫狀態，無法領用'; end if;
- if p_event_date>current_date then raise exception '領用日期不可晚於今天'; end if;
+ if p_event_date is null or p_event_date>current_date then raise exception '領用日期不可空白或晚於今天'; end if;
  update public.switches set state='領用中',issue_date=p_event_date,issue_no=p_document_no,
   cycle_start_date=null,next_charge_date=null,send_date=null,transfer_no=null,
   active_usage_note=p_note,active_recipient_unit=nullif(trim(p_recipient_unit),'')
