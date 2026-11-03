@@ -4,10 +4,12 @@ alter table public.switches drop constraint if exists switches_state_check;
 alter table public.switches add constraint switches_state_check check (state in ('在庫','領用中','送檢充電','充電中','待修','修理中','待驗','驗收中','停用','報廢','遺失','封存','移撥中','移撥出'));
 alter table public.switches add column if not exists ownership_unit text,
  add column if not exists transfer_direction text, add column if not exists transfer_date date,
- add column if not exists transfer_document_no text, add column if not exists transfer_note text;
+ add column if not exists transfer_document_no text, add column if not exists transfer_note text,
+ add column if not exists transfer_source_unit text;
 alter table public.usage_records add column if not exists recipient_unit text,
  add column if not exists event_kind text not null default '領用',
- add column if not exists transfer_document_no text;
+ add column if not exists transfer_document_no text,
+ add column if not exists source_unit text;
 alter table public.usage_records drop constraint if exists usage_records_status_check;
 alter table public.usage_records add constraint usage_records_status_check check (status in ('領用中','已退庫','已移撥','取消'));
 alter table public.switches
@@ -74,10 +76,10 @@ begin
  if coalesce(trim(p_source_unit),'')='' then raise exception '移撥來源區處／單位不可空白'; end if;
  if p_event_date>current_date then raise exception '移撥入日期不可晚於今天'; end if;
  v_due:=(p_event_date+interval '6 months')::date;
- update public.switches set state='在庫',ownership_unit='本處',transfer_direction='移撥入',transfer_date=p_event_date,transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,cycle_start_date=p_event_date,next_charge_date=v_due,return_date=p_event_date,issue_date=null,issue_no=null,send_date=null,transfer_no=null,active_usage_note=null,active_recipient_unit=null where id=p_switch_id returning * into v_new;
+ update public.switches set state='在庫',ownership_unit='本處',transfer_direction='移撥入',transfer_date=p_event_date,transfer_document_no=nullif(trim(p_document_no),''),transfer_note=p_note,transfer_source_unit=trim(p_source_unit),cycle_start_date=p_event_date,next_charge_date=v_due,return_date=p_event_date,issue_date=null,issue_no=null,send_date=null,transfer_no=null,active_usage_note=null,active_recipient_unit=null where id=p_switch_id returning * into v_new;
  select coalesce(max(cycle_no),0)+1 into v_cycle from public.charge_records where switch_id=p_switch_id;
  insert into public.charge_records(switch_id,cycle_no,start_date,due_date,status,note) values(p_switch_id,v_cycle,p_event_date,v_due,'待充電','移撥入本處，依移撥入日期重新起算6個月');
- insert into public.usage_records(switch_id,issue_date,issue_no,return_date,status,note,event_kind,recipient_unit,transfer_document_no) values(p_switch_id,p_event_date,nullif(trim(p_document_no),''),p_event_date,'已移撥',p_note,'移撥入','本處',nullif(trim(p_document_no),''));
+ insert into public.usage_records(switch_id,issue_date,issue_no,return_date,status,note,event_kind,recipient_unit,transfer_document_no,source_unit) values(p_switch_id,p_event_date,nullif(trim(p_document_no),''),p_event_date,'已移撥',p_note,'移撥入','本處',nullif(trim(p_document_no),''),trim(p_source_unit));
  perform public.log_event(v_new,'移撥入',nullif(trim(p_document_no),''),concat('由 ',trim(p_source_unit),' 移撥入本處',case when coalesce(trim(p_note),'')<>'' then '；'||p_note else '' end),to_jsonb(v_old),to_jsonb(v_new));
 end; $$;
 
@@ -91,7 +93,7 @@ grant execute on function public.transfer_switch_in(uuid,date,text,text,text) to
 create or replace function public.issue_switch_with_recipient(
  p_switch_id uuid,p_event_date date,p_document_no text,p_note text,p_recipient_unit text
 )
-returns void language plpgsql security definer set search_path=public as $
+returns void language plpgsql security definer set search_path=public as $$
 declare v_old public.switches; v_new public.switches; v_charge public.charge_records;
 begin
  select * into v_old from public.switches where id=p_switch_id for update;
@@ -110,7 +112,7 @@ begin
   values(p_switch_id,p_event_date,p_document_no,'領用中',p_note,'領用',nullif(trim(p_recipient_unit),''));
  perform public.log_event(v_new,'領用',p_document_no,
   coalesce(p_note,'領用後停止6個月充電計時'),to_jsonb(v_old),to_jsonb(v_new));
-end; $;
+end; $$;
 
 revoke all on function public.issue_switch_with_recipient(uuid,date,text,text,text) from public;
 revoke all on function public.transfer_switch_out(uuid,date,text,text,text) from public;
@@ -122,5 +124,54 @@ grant execute on function public.issue_switch(uuid,date,text,text) to authentica
 grant execute on function public.return_switch(uuid,date,text,text) to authenticated;
 grant execute on function public.transfer_switch_out(uuid,date,text,text,text) to authenticated;
 grant execute on function public.transfer_switch_in(uuid,date,text,text,text) to authenticated;
+
+-- First-time inbound transfer RPC.
+create or replace function public.create_transfer_in_switch(
+ p_material_no text,p_taipower_no text,p_type text,p_rating_type text,
+ p_warehouse text,p_location text,p_event_date date,p_source_unit text,
+ p_document_no text,p_note text
+) returns uuid language plpgsql security definer set search_path=public as $$
+declare v_switch public.switches; v_next date;
+begin
+ if p_material_no !~ '^[0-9]{10}$' then raise exception '開關料號必須為10位數字'; end if;
+ if coalesce(trim(p_taipower_no),'')='' then raise exception '台電編號不可空白'; end if;
+ if coalesce(trim(p_type),'')='' then raise exception '型式不可空白'; end if;
+ if p_rating_type not in ('新品','舊品') then raise exception '評價類型只能是新品或舊品'; end if;
+ if coalesce(trim(p_source_unit),'')='' then raise exception '移撥來源區處／單位不可空白'; end if;
+ if p_event_date is null or p_event_date>current_date then raise exception '移撥入日期不可空白或晚於今天'; end if;
+ if exists(select 1 from public.switches where taipower_no=trim(p_taipower_no)) then
+  raise exception '台電編號已存在：%',trim(p_taipower_no);
+ end if;
+ v_next:=(p_event_date+interval '6 months')::date;
+ insert into public.switches(
+  material_no,taipower_no,type,rating_type,warehouse,location,entry_date,state,
+  cycle_start_date,next_charge_date,remark,ownership_unit,transfer_direction,
+  transfer_date,transfer_document_no,transfer_note,transfer_source_unit,
+  active_usage_note,active_recipient_unit
+ ) values (
+  p_material_no,trim(p_taipower_no),trim(p_type),p_rating_type,
+  nullif(trim(p_warehouse),''),nullif(trim(p_location),''),p_event_date,'在庫',
+  p_event_date,v_next,null,'本處','移撥入',p_event_date,
+  nullif(trim(p_document_no),''),p_note,trim(p_source_unit),null,null
+ ) returning * into v_switch;
+ insert into public.charge_records(switch_id,cycle_no,start_date,due_date,status,note)
+ values(v_switch.id,1,p_event_date,v_next,'待充電','外單位設備首次移撥入本處，依移撥入日期起算6個月');
+ insert into public.usage_records(
+  switch_id,issue_date,issue_no,return_date,status,note,event_kind,
+  recipient_unit,transfer_document_no,source_unit
+ ) values (
+  v_switch.id,p_event_date,nullif(trim(p_document_no),''),p_event_date,
+  '已移撥',p_note,'移撥入','本處',nullif(trim(p_document_no),''),trim(p_source_unit)
+ );
+ perform public.log_event(v_switch,'移撥入',nullif(trim(p_document_no),''),
+  concat('外單位首次移撥入本處；來源：',trim(p_source_unit),
+   case when coalesce(trim(p_note),'')<>'' then '；'||p_note else '' end),
+  null,to_jsonb(v_switch));
+ return v_switch.id;
+end;
+$$;
+revoke all on function public.create_transfer_in_switch(text,text,text,text,text,text,date,text,text,text) from public;
+revoke all on function public.create_transfer_in_switch(text,text,text,text,text,text,date,text,text,text) from anon;
+grant execute on function public.create_transfer_in_switch(text,text,text,text,text,text,date,text,text,text) to authenticated;
 
 commit;
