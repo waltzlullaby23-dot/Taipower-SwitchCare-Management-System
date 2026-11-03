@@ -660,7 +660,11 @@ async function saveUsage(mode){
  try{
   if(mode==="issue"&&(recipient||/移撥/.test(note)))throw new Error("若所有權需移轉，請使用「移撥出」功能。");
   const fn=mode==="issue"?"issue_switch":"return_switch";
-  await api("/rest/v1/rpc/"+fn,{method:"POST",headers:{"Accept-Profile":"public"},body:JSON.stringify({p_switch_id:id,p_event_date:date,p_document_no:no||null,p_note:note||null})});
+  if(mode==="issue"){
+    await api("/rest/v1/rpc/issue_switch_with_recipient",{method:"POST",headers:{"Accept-Profile":"public"},body:JSON.stringify({p_switch_id:id,p_event_date:date,p_document_no:no||null,p_note:note||null,p_recipient_unit:recipient||null})});
+  }else{
+    await api("/rest/v1/rpc/return_switch",{method:"POST",headers:{"Accept-Profile":"public"},body:JSON.stringify({p_switch_id:id,p_event_date:date,p_document_no:no||null,p_note:note||null})});
+  }
   closeModal();await refreshAll();
  }catch(e){const m=document.getElementById("usageMsg");if(m){m.textContent="操作失敗："+errText(e);m.style.display="block";}}
 }
