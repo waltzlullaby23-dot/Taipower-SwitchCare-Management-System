@@ -583,7 +583,7 @@ function usagePage(){
  <div class="panel"><h2>目前領用中（${i.length}）</h2>${i.length?deviceTable(i):'<div class="empty">目前沒有領用中的設備</div>'}</div>
  <div class="panel"><h2>移撥出設備（${o.length}）</h2>${o.length?deviceTable(o):'<div class="empty">目前沒有移撥出設備</div>'}</div>
  <div class="panel"><h2>移撥入設備（${incoming.length}）</h2>${incoming.length?deviceTable(incoming):'<div class="empty">目前沒有移撥入的設備</div>'}</div>
- <div class="panel"><div class="toolbar"><button class="btn" type="button" onclick="openUsage('issue',${JSON.stringify(s.map(x=>x.id))})">領用／出庫</button><button class="btn success" type="button" onclick="openUsage('return',${JSON.stringify(i.map(x=>x.id))})">退庫／重新入庫</button><button class="btn" type="button" onclick="openTransfer('out',${JSON.stringify(s.map(x=>x.id))})">移撥出至其他區處／單位</button><button class="btn success" type="button" onclick="openTransfer('in',${JSON.stringify(o.map(x=>x.id))})">移撥入本處</button></div></div>`;
+ <div class="panel"><div class="toolbar"><button class="btn" type="button" onclick="openUsage('issue',${JSON.stringify(s.map(x=>x.id))})">領用／出庫</button><button class="btn success" type="button" onclick="openUsage('return',${JSON.stringify(i.map(x=>x.id))})">退庫／重新入庫</button><button class="btn" type="button" onclick="openTransfer('out',${JSON.stringify(s.map(x=>x.id))})">移撥出至其他區處／單位</button><button class="btn success" type="button" onclick="openTransfer('in',${JSON.stringify(o.map(x=>x.id))})">移撥入本處</button><button class="btn success" type="button" onclick="openNewTransferIn()">外單位新設備移撥入</button></div></div>`;
 }
 
 async function historyPage(){
@@ -668,6 +668,38 @@ async function saveUsage(mode){
   closeModal();await refreshAll();
  }catch(e){const m=document.getElementById("usageMsg");if(m){m.textContent="操作失敗："+errText(e);m.style.display="block";}}
 }
+function openNewTransferIn(){
+ document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>外單位新設備移撥入</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
+ <div class="notice">適用於從未在本系統建檔的設備。儲存後會建立設備主檔、移撥入履歷及第一個六個月充電週期。</div>
+ <div class="form-grid">
+ <div><label>開關料號（10位數字）*</label><input id="newTransferMaterial" maxlength="10" inputmode="numeric" placeholder="例如：1234567890"></div>
+ <div><label>台電編號 *</label><input id="newTransferTaiPower" placeholder="例如：A1460480"></div>
+ <div class="full"><label>型式 *</label><input id="newTransferType" placeholder="設備型式"></div>
+ <div><label>評價類型 *</label><select id="newTransferRating"><option value="新品">新品</option><option value="舊品" selected>舊品</option></select></div>
+ <div><label>移撥入日期 *</label><input id="newTransferDate" type="date" value="${today()}"></div>
+ <div><label>倉庫</label><input id="newTransferWarehouse" placeholder="例如：21M1"></div>
+ <div><label>儲位</label><input id="newTransferLocation" placeholder="儲位代碼"></div>
+ <div class="full"><label>移撥來源區處／單位 *</label><input id="newTransferSource" placeholder="例如：台中區處／檢修課"></div>
+ <div class="full"><label>移撥單號</label><input id="newTransferDoc" placeholder="實際移撥單號，無則留空"></div>
+ <div class="full"><label>移撥備註</label><textarea id="newTransferNote"></textarea></div>
+ </div><div id="newTransferMsg" class="notice danger" style="display:none"></div>
+ <div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn success" type="button" onclick="saveNewTransferIn()">確認移撥入並建檔</button></div></div></div>`);
+}
+async function saveNewTransferIn(){
+ const material=document.getElementById("newTransferMaterial").value.trim(),no=document.getElementById("newTransferTaiPower").value.trim(),type=document.getElementById("newTransferType").value.trim(),rating=document.getElementById("newTransferRating").value,date=document.getElementById("newTransferDate").value,warehouse=document.getElementById("newTransferWarehouse").value.trim(),location=document.getElementById("newTransferLocation").value.trim(),source=document.getElementById("newTransferSource").value.trim(),doc=document.getElementById("newTransferDoc").value.trim(),note=document.getElementById("newTransferNote").value.trim();
+ const msg=document.getElementById("newTransferMsg");
+ if(!/^\d{10}$/.test(material)){msg.textContent="開關料號必須為10位數字。";msg.style.display="block";return;}
+ if(!no||!type||!date||!source){msg.textContent="台電編號、型式、移撥日期及來源單位均為必填。";msg.style.display="block";return;}
+ if(devices.some(x=>String(x.taipower_no).trim()===no)){msg.textContent="此台電編號已存在於本系統，請使用既有設備的「移撥入本處」功能。";msg.style.display="block";return;}
+ try{
+  await api("/rest/v1/rpc/create_transfer_in_switch",{method:"POST",headers:{"Accept-Profile":"public"},body:JSON.stringify({
+   p_material_no:material,p_taipower_no:no,p_type:type,p_rating_type:rating,
+   p_warehouse:warehouse||null,p_location:location||null,p_event_date:date,
+   p_source_unit:source,p_document_no:doc||null,p_note:note||null
+  })});
+  closeModal();await refreshAll();
+ }catch(e){msg.textContent="移撥入建檔失敗："+errText(e);msg.style.display="block";}
+}
 function openTransfer(mode,ids){
  if(!ids.length)return alert(mode==="out"?"目前沒有本處在庫設備可移撥出。":"目前沒有待移撥入設備。");
  const list=ids.map(id=>devices.find(x=>x.id===id)).filter(Boolean);
@@ -743,13 +775,13 @@ async function detail(id){
   }catch(e){return alert("讀取設備履歷失敗："+errText(e));}
   const s=statusOf(x);
   document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>設備履歷週期</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
-  <div class="form-grid"><div><b>料號</b><br>${esc(x.material_no)}</div><div><b>台電編號</b><br>${esc(x.taipower_no)}</div><div class="full"><b>型式</b><br>${esc(x.type)}</div><div><b>評價</b><br>${esc(x.rating_type)}</div><div><b>狀態</b><br><span class="badge ${s.cls}">${s.label}</span></div><div><b>入帳日期</b><br>${fmt(x.entry_date)}</div><div><b>目前週期起算</b><br>${fmt(currentCycleStart(x))}</div><div><b>下次充電</b><br>${fmt(currentNextCharge(x))}</div><div><b>倉庫／儲位</b><br>${esc(x.warehouse||"-")} / ${esc(x.location||"-")}</div><div><b>所有權歸屬</b><br>${esc(x.ownership_unit||"本處")}</div><div><b>目前領用對象</b><br>${esc(x.active_recipient_unit||"-")}</div><div class="full"><b>目前領用備註</b><br>${esc(x.active_usage_note||"-")}</div><div><b>移撥方向</b><br>${esc(x.transfer_direction||"-")}</div><div><b>移撥日期</b><br>${fmt(x.transfer_date)}</div><div><b>移撥單號</b><br>${esc(x.transfer_document_no||"-")}</div><div class="full"><b>移撥備註</b><br>${esc(x.transfer_note||"-")}</div></div>
+  <div class="form-grid"><div><b>料號</b><br>${esc(x.material_no)}</div><div><b>台電編號</b><br>${esc(x.taipower_no)}</div><div class="full"><b>型式</b><br>${esc(x.type)}</div><div><b>評價</b><br>${esc(x.rating_type)}</div><div><b>狀態</b><br><span class="badge ${s.cls}">${s.label}</span></div><div><b>入帳日期</b><br>${fmt(x.entry_date)}</div><div><b>目前週期起算</b><br>${fmt(currentCycleStart(x))}</div><div><b>下次充電</b><br>${fmt(currentNextCharge(x))}</div><div><b>倉庫／儲位</b><br>${esc(x.warehouse||"-")} / ${esc(x.location||"-")}</div><div><b>所有權歸屬</b><br>${esc(x.ownership_unit||"本處")}</div><div><b>目前領用對象</b><br>${esc(x.active_recipient_unit||"-")}</div><div class="full"><b>目前領用備註</b><br>${esc(x.active_usage_note||"-")}</div><div><b>移撥方向</b><br>${esc(x.transfer_direction||"-")}</div><div><b>移撥來源單位</b><br>${esc(x.transfer_source_unit||"-")}</div><div><b>移撥日期</b><br>${fmt(x.transfer_date)}</div><div><b>移撥單號</b><br>${esc(x.transfer_document_no||"-")}</div><div class="full"><b>移撥備註</b><br>${esc(x.transfer_note||"-")}</div></div>
   <div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal();openDevice(devices.find(z=>z.id==='${x.id}'))">編輯</button>${x.state==="在庫"&&["逾期","即將到期"].includes(s.label)?`<button class="btn" type="button" onclick="closeModal();openCharge('${x.id}')">送檢充電</button>`:""}${["送檢充電","充電中"].includes(x.state)?`<button class="btn success" type="button" onclick="closeModal();completeCharge('${x.id}')">完成充電</button>`:""}${x.state==="領用中"?`<button class="btn success" type="button" onclick="closeModal();openUsage('return',['${x.id}'])">退庫</button>`:x.state==="在庫"?`<button class="btn danger" type="button" onclick="closeModal();openUsage('issue',['${x.id}'])">領用／出庫</button>`:""}${x.state==="在庫"?`<button class="btn" type="button" onclick="closeModal();openTransfer('out',['${x.id}'])">移撥出</button>`:""}${x.state==="移撥出"?`<button class="btn success" type="button" onclick="closeModal();openTransfer('in',['${x.id}'])">移撥入本處</button>`:""}${x.state==="在庫"?`<button class="btn danger" type="button" onclick="deleteSwitch('${x.id}')">刪除建檔</button>`:""}</div>
   <div class="section-grid"><div class="panel"><h3>充電履歷</h3>${chargeRowsTable(c)}</div><div class="panel"><h3>領用履歷</h3>${usageRowsTable(u)}</div><div class="panel"><h3>稽核履歷</h3>${auditTimeline(h)}</div></div>
   </div></div>`);
 }
 function chargeRowsTable(r){return r?.length?`<div class="table-wrap"><table style="min-width:650px"><thead><tr><th>週期</th><th>應充電日</th><th>送檢日</th><th>移撥單號</th><th>完成日</th><th>狀態</th></tr></thead><tbody>${r.map(x=>`<tr><td>${x.cycle_no}</td><td>${fmt(x.due_date)}</td><td>${fmt(x.send_date)}</td><td>${esc(x.transfer_no||"-")}</td><td>${fmt(x.completed_date)}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">尚無充電紀錄</div>'}
-function usageRowsTable(r){return r?.length?`<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>事件</th><th>日期</th><th>對象／單位</th><th>單號</th><th>退庫日</th><th>備註</th><th>狀態</th></tr></thead><tbody>${r.map(x=>`<tr><td>${esc(x.event_kind||"領用")}</td><td>${fmt(x.issue_date)}</td><td>${esc(x.recipient_unit||"-")}</td><td>${esc(x.transfer_document_no||x.issue_no||"-")}</td><td>${fmt(x.return_date)}</td><td>${esc(x.note||"-")}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">尚無領用／移撥紀錄</div>'}
+function usageRowsTable(r){return r?.length?`<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>事件</th><th>日期</th><th>接收／對象單位</th><th>移撥來源單位</th><th>單號</th><th>退庫日</th><th>備註</th><th>狀態</th></tr></thead><tbody>${r.map(x=>`<tr><td>${esc(x.event_kind||"領用")}</td><td>${fmt(x.issue_date)}</td><td>${esc(x.recipient_unit||"-")}</td><td>${esc(x.source_unit||"-")}</td><td>${esc(x.transfer_document_no||x.issue_no||"-")}</td><td>${fmt(x.return_date)}</td><td>${esc(x.note||"-")}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">尚無領用／移撥紀錄</div>'}
 function auditTimeline(r){return r?.length?`<div class="timeline">${r.map(x=>`<div class="timeline-item"><div class="timeline-title">${esc(x.event_type)}　${new Date(x.event_at).toLocaleString("zh-TW")}</div><div class="timeline-meta">單號：${esc(x.document_no||"—")}　操作者：${esc(x.actor_email||"—")}</div><div class="timeline-note">${esc(x.note||"")}</div></div>`).join("")}</div>`:'<div class="empty">尚無稽核紀錄</div>'}
 
 function reportsPage(){
