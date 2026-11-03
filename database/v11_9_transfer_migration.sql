@@ -175,3 +175,5 @@ revoke all on function public.create_transfer_in_switch(text,text,text,text,text
 grant execute on function public.create_transfer_in_switch(text,text,text,text,text,text,date,text,text,text) to authenticated;
 
 commit;
+
+notify pgrst, 'reload schema';
