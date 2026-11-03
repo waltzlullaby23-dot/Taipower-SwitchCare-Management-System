@@ -334,8 +334,20 @@ function renderLayout(){
 }
 async function refreshAll(){
   try{
-    const body=await api("/rest/v1/switches?select=*&order=taipower_no.asc",{headers:{"Accept-Profile":"public"}});
+    const [body,usage]=await Promise.all([
+      api("/rest/v1/switches?select=*&order=taipower_no.asc",{headers:{"Accept-Profile":"public"}}),
+      api("/rest/v1/usage_records?select=*&order=issue_date.desc&limit=5000",{headers:{"Accept-Profile":"public"}})
+    ]);
     devices=body||[];
+    const activeBySwitch=new Map();
+    for(const u of (usage||[])){
+      if(u.status==="領用中" && (u.event_kind||"領用")==="領用" && !activeBySwitch.has(u.switch_id))activeBySwitch.set(u.switch_id,u);
+    }
+    for(const d of devices){
+      const u=activeBySwitch.get(d.id);
+      d.active_usage_note=u?.note||"";
+      d.active_recipient_unit=u?.recipient_unit||"";
+    }
     render();
   }catch(e){
     const c=document.getElementById("content");
@@ -727,8 +739,8 @@ async function detail(id){
   }catch(e){return alert("讀取設備履歷失敗："+errText(e));}
   const s=statusOf(x);
   document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>設備履歷週期</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
-  <div class="form-grid"><div><b>料號</b><br>${esc(x.material_no)}</div><div><b>台電編號</b><br>${esc(x.taipower_no)}</div><div class="full"><b>型式</b><br>${esc(x.type)}</div><div><b>評價</b><br>${esc(x.rating_type)}</div><div><b>狀態</b><br><span class="badge ${s.cls}">${s.label}</span></div><div><b>入帳日期</b><br>${fmt(x.entry_date)}</div><div><b>目前週期起算</b><br>${fmt(currentCycleStart(x))}</div><div><b>下次充電</b><br>${fmt(currentNextCharge(x))}</div><div><b>倉庫／儲位</b><br>${esc(x.warehouse||"-")} / ${esc(x.location||"-")}</div></div>
-  <div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal();openDevice(devices.find(z=>z.id==='${x.id}'))">編輯</button>${x.state==="在庫"&&["逾期","即將到期"].includes(s.label)?`<button class="btn" type="button" onclick="closeModal();openCharge('${x.id}')">送檢充電</button>`:""}${["送檢充電","充電中"].includes(x.state)?`<button class="btn success" type="button" onclick="closeModal();completeCharge('${x.id}')">完成充電</button>`:""}${x.state==="領用中"?`<button class="btn success" type="button" onclick="closeModal();openUsage('return',['${x.id}'])">退庫</button>`:`<button class="btn danger" type="button" onclick="closeModal();openUsage('issue',['${x.id}'])">領用／出庫</button>`}${x.state==="在庫"?`<button class="btn danger" type="button" onclick="deleteSwitch('${x.id}')">刪除建檔</button>`:""}</div>
+  <div class="form-grid"><div><b>料號</b><br>${esc(x.material_no)}</div><div><b>台電編號</b><br>${esc(x.taipower_no)}</div><div class="full"><b>型式</b><br>${esc(x.type)}</div><div><b>評價</b><br>${esc(x.rating_type)}</div><div><b>狀態</b><br><span class="badge ${s.cls}">${s.label}</span></div><div><b>入帳日期</b><br>${fmt(x.entry_date)}</div><div><b>目前週期起算</b><br>${fmt(currentCycleStart(x))}</div><div><b>下次充電</b><br>${fmt(currentNextCharge(x))}</div><div><b>倉庫／儲位</b><br>${esc(x.warehouse||"-")} / ${esc(x.location||"-")}</div><div><b>所有權歸屬</b><br>${esc(x.ownership_unit||"本處")}</div><div><b>目前領用對象</b><br>${esc(x.active_recipient_unit||"-")}</div><div class="full"><b>目前領用備註</b><br>${esc(x.active_usage_note||"-")}</div><div><b>移撥方向</b><br>${esc(x.transfer_direction||"-")}</div><div><b>移撥日期</b><br>${fmt(x.transfer_date)}</div><div><b>移撥單號</b><br>${esc(x.transfer_document_no||"-")}</div><div class="full"><b>移撥備註</b><br>${esc(x.transfer_note||"-")}</div></div>
+  <div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal();openDevice(devices.find(z=>z.id==='${x.id}'))">編輯</button>${x.state==="在庫"&&["逾期","即將到期"].includes(s.label)?`<button class="btn" type="button" onclick="closeModal();openCharge('${x.id}')">送檢充電</button>`:""}${["送檢充電","充電中"].includes(x.state)?`<button class="btn success" type="button" onclick="closeModal();completeCharge('${x.id}')">完成充電</button>`:""}${x.state==="領用中"?`<button class="btn success" type="button" onclick="closeModal();openUsage('return',['${x.id}'])">退庫</button>`:x.state==="在庫"?`<button class="btn danger" type="button" onclick="closeModal();openUsage('issue',['${x.id}'])">領用／出庫</button>`:""}${x.state==="在庫"?`<button class="btn" type="button" onclick="closeModal();openTransfer('out',['${x.id}'])">移撥出</button>`:""}${x.state==="移撥出"?`<button class="btn success" type="button" onclick="closeModal();openTransfer('in',['${x.id}'])">移撥入本處</button>`:""}${x.state==="在庫"?`<button class="btn danger" type="button" onclick="deleteSwitch('${x.id}')">刪除建檔</button>`:""}</div>
   <div class="section-grid"><div class="panel"><h3>充電履歷</h3>${chargeRowsTable(c)}</div><div class="panel"><h3>領用履歷</h3>${usageRowsTable(u)}</div><div class="panel"><h3>稽核履歷</h3>${auditTimeline(h)}</div></div>
   </div></div>`);
 }
