@@ -29,6 +29,31 @@ from latest_paused p
 join public.switches s on s.id = p.switch_id
 where c.id = p.id and s.state = '領用中';
 
+-- Fallback for legacy issued devices whose cycle dates were cleared and had no usable charge row.
+update public.switches s
+set cycle_start_date = coalesce(s.cycle_start_date,s.last_charge_date,s.entry_date),
+    next_charge_date = coalesce(
+      s.next_charge_date,
+      (coalesce(s.last_charge_date,s.cycle_start_date,s.entry_date)+interval '6 months')::date
+    )
+where s.state='領用中' and s.next_charge_date is null;
+
+-- Ensure every currently issued device has one active pending cycle row.
+insert into public.charge_records(switch_id,cycle_no,start_date,due_date,status,note)
+select s.id,
+       coalesce((select max(c.cycle_no)+1 from public.charge_records c where c.switch_id=s.id),1),
+       coalesce(s.cycle_start_date,s.last_charge_date,s.entry_date),
+       s.next_charge_date,
+       '待充電',
+       'v12.0規則修復：領用期間充電週期持續計算'
+from public.switches s
+where s.state='領用中'
+  and s.next_charge_date is not null
+  and not exists (
+    select 1 from public.charge_records c
+    where c.switch_id=s.id and c.status='待充電'
+  );
+
 create or replace function public.issue_switch_with_recipient(
  p_switch_id uuid,p_event_date date,p_document_no text,p_note text,p_recipient_unit text
 )
