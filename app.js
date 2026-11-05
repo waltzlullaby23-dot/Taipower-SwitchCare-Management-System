@@ -1,4 +1,4 @@
-/* SwitchCare Enterprise v11.9
+/* SwitchCare Enterprise v12.0
    Professional enterprise rebuild:
    - Direct Supabase REST API with ASCII-safe request headers
    - No supabase-js Auth dependency
@@ -305,7 +305,7 @@ async function signIn(){
   try{
     const body=await api("/auth/v1/token?grant_type=password",{
       method:"POST",
-      headers:{"X-Client-Info":"switchcare-v11.9"},
+      headers:{"X-Client-Info":"switchcare-v12.0"},
       body:JSON.stringify({email,password})
     });
     if(!body?.access_token)throw new Error("Supabase 未回傳登入 Token。");
@@ -327,7 +327,7 @@ function pageTitle(){return({dashboard:"設備生命週期戰情中心",switches
 function go(p){page=p;renderLayout();render();}
 function renderLayout(){
   document.getElementById("app").innerHTML=`<div class="app">
-  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v11.9｜履歷週期・充電・移撥・稽核</small></div>
+  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v12.0｜履歷週期・充電・移撥・稽核</small></div>
   <nav class="nav">${nav("dashboard","儀表板")}${nav("switches","開關設備主檔")}${nav("charging","充電與週期管理")}${nav("usage","領用／退庫管理")}${nav("lifecycle","履歷週期")}${nav("inspection","檢修管理")}${nav("exceptions","異常與風險中心")}${nav("documents","移撥單／文件管理")}${nav("reports","報表與稽核")}${nav("settings","系統設定")}</nav></aside>
   <main class="main"><div class="topbar"><div><h1>${pageTitle()}</h1><span class="muted">在庫與領用均持續計時｜退庫沿用原週期｜履歷／檢修／稽核</span></div>
   <div style="display:flex;align-items:center;gap:10px">${page!=="settings"?`<button class="btn" type="button" onclick="openDevice()">＋ 新增開關</button>`:""}<span class="userbar">${esc(session?.user?.email||"")}</span><button class="btn secondary small" type="button" onclick="signOut()">登出</button></div></div><div id="content"></div></main></div>`;
