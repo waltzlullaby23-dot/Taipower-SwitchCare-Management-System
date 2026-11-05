@@ -583,7 +583,7 @@ function usagePage(){
  <div class="panel"><h2>目前領用中（${i.length}）</h2>${i.length?deviceTable(i):'<div class="empty">目前沒有領用中的設備</div>'}</div>
  <div class="panel"><h2>移撥出設備（${o.length}）</h2>${o.length?deviceTable(o):'<div class="empty">目前沒有移撥出設備</div>'}</div>
  <div class="panel"><h2>移撥入設備（${incoming.length}）</h2>${incoming.length?deviceTable(incoming):'<div class="empty">目前沒有移撥入的設備</div>'}</div>
- <div class="panel"><div class="toolbar"><button class="btn" type="button" onclick="openUsage('issue',${JSON.stringify(s.map(x=>x.id))})">領用／出庫</button><button class="btn success" type="button" onclick="openUsage('return',${JSON.stringify(i.map(x=>x.id))})">退庫／重新入庫</button><button class="btn" type="button" onclick="openTransfer('out',${JSON.stringify(s.map(x=>x.id))})">移撥出至其他區處／單位</button><button class="btn success" type="button" onclick="openTransfer('in',${JSON.stringify(o.map(x=>x.id))})">移撥入本處</button><button class="btn success" type="button" onclick="openNewTransferIn()">外單位新設備移撥入</button></div></div>`;
+ <div class="panel"><div class="toolbar"><button class="btn" type="button" onclick="openUsage('issue',${JSON.stringify(s.map(x=>x.id))})">領用／出庫</button><button class="btn success" type="button" onclick="openUsage('return',${JSON.stringify(i.map(x=>x.id))})">退庫／重新入庫</button><button class="btn" type="button" onclick="openTransfer('out',${JSON.stringify(s.map(x=>x.id))})">移撥出至其他區處</button><button class="btn success" type="button" onclick="openTransfer('in',${JSON.stringify(o.map(x=>x.id))})">移撥入本處</button><button class="btn success" type="button" onclick="openNewTransferIn()">外單位新設備移撥入</button></div></div>`;
 }
 
 async function historyPage(){
@@ -651,14 +651,14 @@ function openUsage(mode,ids){
   document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>${mode==="issue"?"領用／出庫":"退庫／重新入庫"}</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
   <div class="form-grid"><div class="full"><label>設備</label><select id="uid">${list.map(x=>`<option value="${x.id}">${esc(x.taipower_no)}｜${esc(x.material_no)}｜${esc(x.type)}</option>`).join("")}</select></div>
   <div><label>日期 *</label><input id="ud" type="date" value="${today()}"></div><div><label>單號</label><input id="un" placeholder="ERP／領用單號"></div>
-  <div class="full"><label>領用對象／單位（選填）</label><input id="recipientUnit" placeholder="例如：檢修課、○○區處"></div>
-  <div class="full"><label>領用備註</label><textarea id="unote"></textarea></div></div><div class="notice">${mode==="issue"?"領用後停止6個月充電倒數。":"退庫後視同重新入庫，退庫日重新起算6個月。"}</div>
+  <div class="full"><label>領用對象／單位（選填）</label><input id="recipientUnit" placeholder="例如：本處檢修課、○○承攬商"></div>
+  <div class="full"><label>領用備註</label><textarea id="unote"></textarea></div></div><div class="notice">${mode==="issue"?"本處其他課或承攬商領用；所有權仍屬本處，領用期間暫停充電倒數。":"退庫後視同重新入庫，退庫日重新起算6個月。"}</div>
   <div id="usageMsg" class="notice danger" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" type="button" onclick="saveUsage('${mode}')">確認</button></div></div></div>`);
 }
 async function saveUsage(mode){
  const id=document.getElementById("uid").value,date=document.getElementById("ud").value,no=document.getElementById("un").value.trim(),note=document.getElementById("unote").value.trim(),recipient=document.getElementById("recipientUnit")?.value.trim()||"";
  try{
-  if(mode==="issue"&&(recipient||/移撥/.test(note)))throw new Error("若所有權需移轉，請使用「移撥出」功能。");
+  // 領用對象僅記錄本處內部領用（其他課／包商），不代表設備所有權移轉。
   const fn=mode==="issue"?"issue_switch":"return_switch";
   if(mode==="issue"){
     await api("/rest/v1/rpc/issue_switch_with_recipient",{method:"POST",headers:{"Accept-Profile":"public"},body:JSON.stringify({p_switch_id:id,p_event_date:date,p_document_no:no||null,p_note:note||null,p_recipient_unit:recipient||null})});
@@ -679,7 +679,7 @@ function openNewTransferIn(){
  <div><label>移撥入日期 *</label><input id="newTransferDate" type="date" value="${today()}"></div>
  <div><label>倉庫</label><input id="newTransferWarehouse" placeholder="例如：21M1"></div>
  <div><label>儲位</label><input id="newTransferLocation" placeholder="儲位代碼"></div>
- <div class="full"><label>移撥來源區處／單位 *</label><input id="newTransferSource" placeholder="例如：台中區處／檢修課"></div>
+ <div class="full"><label>移撥來源區處 *</label><input id="newTransferSource" placeholder="例如：台中區處"></div>
  <div class="full"><label>移撥單號</label><input id="newTransferDoc" placeholder="實際移撥單號，無則留空"></div>
  <div class="full"><label>移撥備註</label><textarea id="newTransferNote"></textarea></div>
  </div><div id="newTransferMsg" class="notice danger" style="display:none"></div>
@@ -703,17 +703,17 @@ async function saveNewTransferIn(){
 function openTransfer(mode,ids){
  if(!ids.length)return alert(mode==="out"?"目前沒有本處在庫設備可移撥出。":"目前沒有待移撥入設備。");
  const list=ids.map(id=>devices.find(x=>x.id===id)).filter(Boolean);
- document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>${mode==="out"?"移撥出至其他區處／單位":"移撥入本處"}</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
+ document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>${mode==="out"?"移撥出至其他區處":"移撥入本處"}</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
  <div class="form-grid"><div class="full"><label>設備 *</label><select id="transferSwitchId">${list.map(x=>`<option value="${x.id}">${esc(x.taipower_no)}｜${esc(x.material_no)}｜${esc(x.type)}</option>`).join("")}</select></div>
  <div><label>移撥日期 *</label><input id="transferDate" type="date" value="${today()}"></div><div><label>移撥單號</label><input id="transferNo" placeholder="實際單號（無則留空）"></div>
- <div class="full"><label>${mode==="out"?"接收區處／單位 *":"移撥來源區處／單位 *"}</label><input id="transferUnit" placeholder="例如：台中區處／檢修課"></div>
+ <div class="full"><label>${mode==="out"?"接收區處 *":"移撥來源區處 *"}</label><input id="transferUnit" placeholder="例如：台中區處"></div>
  <div class="full"><label>移撥備註</label><textarea id="transferNote"></textarea></div></div>
- <div class="notice">${mode==="out"?"移撥完成後所有權歸接收單位，本處庫存與領用中統計均不再計入；充電倒數停止。":"移撥入帳後納入本處在庫管理，並以移撥入日期重新起算6個月充電週期。"}</div>
+ <div class="notice">${mode==="out"?"僅適用於移交其他區處；移撥完成後設備所有權轉至接收區處，本處庫存與領用中統計不再計入，充電倒數停止。":"移撥入帳後納入本處在庫管理，並以移撥入日期重新起算6個月充電週期。"}</div>
  <div id="transferMsg" class="notice danger" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" type="button" onclick="saveTransfer('${mode}')">確認移撥</button></div></div></div>`);
 }
 async function saveTransfer(mode){
  const id=document.getElementById("transferSwitchId").value,date=document.getElementById("transferDate").value,no=document.getElementById("transferNo").value.trim(),unit=document.getElementById("transferUnit").value.trim(),note=document.getElementById("transferNote").value.trim();
- if(!date||!unit){const e=document.getElementById("transferMsg");e.textContent="日期及區處／單位不可空白。";e.style.display="block";return;}
+ if(!date||!unit){const e=document.getElementById("transferMsg");e.textContent="日期及區處不可空白。";e.style.display="block";return;}
  try{
   const fn=mode==="out"?"transfer_switch_out":"transfer_switch_in",params={p_switch_id:id,p_event_date:date,p_document_no:no||null,p_note:note||null};
   params[mode==="out"?"p_recipient_unit":"p_source_unit"]=unit;
