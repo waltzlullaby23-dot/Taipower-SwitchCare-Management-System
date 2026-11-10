@@ -486,8 +486,8 @@ function renderUsageDocuments(){
     const dateTitle=kind==="issue"?"發料日期":"收料日期";
     area.innerHTML='<div class="table-wrap"><table><thead><tr><th>'+title+'</th><th>'+dateTitle+'</th><th>領用單位</th><th>設備數量</th><th>查看</th></tr></thead><tbody>'+
       groups.map(g=>{
-        const arg=String(g.no).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");
-        return '<tr><td><button class="linkbtn" type="button" onclick="showUsageDocumentDetail(\''+kind+'\',\''+arg+'\')">'+esc(g.no)+'</button></td><td>'+fmt(g.date)+'</td><td>'+esc(g.parties.join("、")||"-")+'</td><td><b>'+g.qty+'</b> 具</td><td><button class="btn small secondary" type="button" onclick="showUsageDocumentDetail(\''+kind+'\',\''+arg+'\')">查看明細</button></td></tr>';
+        const arg=JSON.stringify(String(g.no)).replace(/"/g,"&quot;");
+        return '<tr><td><button class="linkbtn" type="button" onclick="showUsageDocumentDetail(&quot;'+kind+'&quot;,'+arg+')">'+esc(g.no)+'</button></td><td>'+fmt(g.date)+'</td><td>'+esc(g.parties.join("、")||"-")+'</td><td><b>'+g.qty+'</b> 具</td><td><button class="btn small secondary" type="button" onclick="showUsageDocumentDetail(&quot;'+kind+'&quot;,'+arg+')">查看明細</button></td></tr>';
       }).join("")+'</tbody></table></div>';
   };
   renderOne("issue",(document.getElementById("issueDocQ")?.value||"").trim().toLowerCase(),"issueDocArea");
