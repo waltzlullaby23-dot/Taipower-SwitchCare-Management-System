@@ -453,6 +453,57 @@ async function documentsPage(){
   await Promise.all([loadTransferOrders(),loadDocuments()]);
 }
 
+
+function usageDocumentsPage(){
+  document.getElementById("content").innerHTML =
+    '<div class="notice">發料單記錄本處設備交付包商或工作班；收料單記錄用餘設備退回本處。兩種單號分開保存，點選單號可查看設備明細與數量。</div>'+
+    '<div class="panel"><h2>發料單（領用／出庫）</h2><div class="toolbar"><input id="issueDocQ" placeholder="搜尋發料單號／公司編號／領用單位" oninput="renderUsageDocuments()"></div><div id="issueDocArea"></div></div>'+
+    '<div class="panel"><h2>收料單（用餘退回）</h2><div class="toolbar"><input id="returnDocQ" placeholder="搜尋收料單號／公司編號" oninput="renderUsageDocuments()"></div><div id="returnDocArea"></div></div>';
+  renderUsageDocuments();
+}
+function usageDocumentGroups(kind){
+  const isIssue=kind==="issue", groups=new Map();
+  for(const r of usageRows){
+    if((r.event_kind||"領用")!=="領用")continue;
+    if(isIssue ? !r.issue_no : (!r.return_date || !r.return_document_no))continue;
+    const no=isIssue?r.issue_no:r.return_document_no;
+    if(!groups.has(no))groups.set(no,[]);
+    groups.get(no).push({...r,device:devices.find(x=>x.id===r.switch_id)||null});
+  }
+  return [...groups.entries()].map(([no,rows])=>({
+    no,rows,qty:new Set(rows.map(r=>r.switch_id)).size,
+    date:rows.map(r=>isIssue?r.issue_date:r.return_date).filter(Boolean).sort().at(-1)||"",
+    parties:[...new Set(rows.map(r=>r.recipient_unit).filter(Boolean))]
+  })).sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.no).localeCompare(String(b.no)));
+}
+function renderUsageDocuments(){
+  const renderOne=(kind,q,id)=>{
+    const area=document.getElementById(id);if(!area)return;
+    const groups=usageDocumentGroups(kind).filter(g=>!q||[g.no,...g.parties,...g.rows.flatMap(r=>[r.device?.taipower_no,r.device?.material_no,r.note])].join(" ").toLowerCase().includes(q));
+    if(!groups.length){area.innerHTML='<div class="empty">目前沒有符合條件的單據紀錄。</div>';return;}
+    const title=kind==="issue"?"發料單號":"收料單號";
+    const dateTitle=kind==="issue"?"發料日期":"收料日期";
+    area.innerHTML='<div class="table-wrap"><table><thead><tr><th>'+title+'</th><th>'+dateTitle+'</th><th>領用單位</th><th>設備數量</th><th>查看</th></tr></thead><tbody>'+
+      groups.map(g=>{
+        const arg=String(g.no).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;");
+        return '<tr><td><button class="linkbtn" type="button" onclick="showUsageDocumentDetail(\''+kind+'\',\''+arg+'\')">'+esc(g.no)+'</button></td><td>'+fmt(g.date)+'</td><td>'+esc(g.parties.join("、")||"-")+'</td><td><b>'+g.qty+'</b> 具</td><td><button class="btn small secondary" type="button" onclick="showUsageDocumentDetail(\''+kind+'\',\''+arg+'\')">查看明細</button></td></tr>';
+      }).join("")+'</tbody></table></div>';
+  };
+  renderOne("issue",(document.getElementById("issueDocQ")?.value||"").trim().toLowerCase(),"issueDocArea");
+  renderOne("return",(document.getElementById("returnDocQ")?.value||"").trim().toLowerCase(),"returnDocArea");
+}
+function showUsageDocumentDetail(kind,no){
+  const group=usageDocumentGroups(kind).find(g=>g.no===no);if(!group)return;
+  const rows=[...group.rows].sort((a,b)=>String(a.device?.taipower_no||"").localeCompare(String(b.device?.taipower_no||"")));
+  const title=kind==="issue"?"發料單":"收料單";
+  const dateTitle=kind==="issue"?"發料日期":"收料日期";
+  document.body.insertAdjacentHTML("beforeend",'<div class="modal" id="modal"><div class="modal-box" style="max-width:1100px"><div class="modal-head"><h2>'+title+'：'+esc(no)+'</h2><button class="close" type="button" onclick="closeModal()">×</button></div>'+
+    '<div class="form-grid"><div><b>單號</b><br>'+esc(no)+'</div><div><b>'+dateTitle+'</b><br>'+fmt(group.date)+'</div><div><b>設備數量</b><br>'+group.qty+' 具</div><div><b>領用對象／單位</b><br>'+esc(group.parties.join("、")||"-")+'</div></div>'+
+    '<div class="panel"><h3>設備明細</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>公司／台電編號</th><th>料號</th><th>型式</th><th>領用單位</th><th>發料日期</th><th>退庫日期</th><th>備註</th><th>狀態</th></tr></thead><tbody>'+
+    rows.map((r,i)=>'<tr><td>'+(i+1)+'</td><td><b>'+esc(r.device?.taipower_no||"設備主檔已不存在")+'</b></td><td>'+esc(r.device?.material_no||"-")+'</td><td>'+esc(r.device?.type||"-")+'</td><td>'+esc(r.recipient_unit||"-")+'</td><td>'+fmt(r.issue_date)+'</td><td>'+fmt(r.return_date)+'</td><td>'+esc(r.note||"-")+'</td><td>'+esc(r.status||"-")+'</td></tr>').join("")+
+    '</tbody></table></div></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">關閉</button></div></div></div>');
+}
+
 async function storageUpload(file, path){
   if(!session?.access_token) throw new Error("登入狀態已失效，請重新登入。");
   const response=await fetch(`${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(STORAGE_BUCKET)}/${path.split('/').map(encodeURIComponent).join('/')}`,{
@@ -787,7 +838,7 @@ async function detail(id){
   </div></div>`);
 }
 function chargeRowsTable(r){return r?.length?`<div class="table-wrap"><table style="min-width:650px"><thead><tr><th>週期</th><th>應充電日</th><th>送檢日</th><th>移撥單號</th><th>完成日</th><th>狀態</th></tr></thead><tbody>${r.map(x=>`<tr><td>${x.cycle_no}</td><td>${fmt(x.due_date)}</td><td>${fmt(x.send_date)}</td><td>${esc(x.transfer_no||"-")}</td><td>${fmt(x.completed_date)}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">尚無充電紀錄</div>'}
-function usageRowsTable(r){return r?.length?`<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>事件</th><th>日期</th><th>接收／對象單位</th><th>移撥來源單位</th><th>單號</th><th>退庫日</th><th>備註</th><th>狀態</th></tr></thead><tbody>${r.map(x=>`<tr><td>${esc(x.event_kind||"領用")}</td><td>${fmt(x.issue_date)}</td><td>${esc(x.recipient_unit||"-")}</td><td>${esc(x.source_unit||"-")}</td><td>${esc(x.transfer_document_no||x.issue_no||"-")}</td><td>${fmt(x.return_date)}</td><td>${esc(x.note||"-")}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">尚無領用／移撥紀錄</div>'}
+function usageRowsTable(r){return r?.length?`<div class="table-wrap"><table style="min-width:820px"><thead><tr><th>事件</th><th>發料日期</th><th>發料單號</th><th>領用單位</th><th>退庫日</th><th>收料單號</th><th>備註</th><th>狀態</th></tr></thead><tbody>${r.map(x=>`<tr><td>${esc(x.event_kind||"領用")}</td><td>${fmt(x.issue_date)}</td><td>${esc(x.issue_no||"-")}</td><td>${esc(x.recipient_unit||"-")}</td><td>${fmt(x.return_date)}</td><td>${esc(x.return_document_no||"-")}</td><td>${esc(x.note||"-")}</td><td>${esc(x.status)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">尚無領用／移撥紀錄</div>'}
 function auditTimeline(r){return r?.length?`<div class="timeline">${r.map(x=>`<div class="timeline-item"><div class="timeline-title">${esc(x.event_type)}　${new Date(x.event_at).toLocaleString("zh-TW")}</div><div class="timeline-meta">單號：${esc(x.document_no||"—")}　操作者：${esc(x.actor_email||"—")}</div><div class="timeline-note">${esc(x.note||"")}</div></div>`).join("")}</div>`:'<div class="empty">尚無稽核紀錄</div>'}
 
 function reportsPage(){
