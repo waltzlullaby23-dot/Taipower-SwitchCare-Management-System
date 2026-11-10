@@ -385,6 +385,7 @@ function deviceTable(list,showDays=false){
 function dashboard(){
   const stock=devices.filter(isCurrentLocalStock),issued=devices.filter(x=>x.state==="領用中"),transferOut=devices.filter(x=>x.state==="移撥出"),transferIn=devices.filter(x=>x.transfer_direction==="移撥入"&&!["移撥出","報廢","遺失"].includes(x.state)),soon=devices.filter(x=>chargeTimingOf(x)?.label==="即將到期"),over=devices.filter(x=>chargeTimingOf(x)?.label==="逾期"),proc=devices.filter(x=>["送檢充電","充電中"].includes(x.state));
   const high=devices.filter(x=>riskOf(x).label==="高");
+  const transferInStock=stock.filter(x=>x.transfer_direction==="移撥入").length;
 
   document.getElementById("content").innerHTML=`<div class="cards">
     ${card("設備總數",devices.length,"","showDashboardList('all')")}
@@ -398,7 +399,7 @@ function dashboard(){
     ${card("高風險設備",high.length,"danger","showDashboardList('high')")}
 
   </div>
-  <div class="panel"><h2>核心業務規則</h2><div class="kpi-mini"><div>在庫週期<b>${CYCLE_MONTHS}個月</b></div><div>提前預警<b>${REMIND_DAYS}天</b></div><div>領用期間<b>持續計時</b></div><div>退庫<b>沿用原週期</b></div></div></div>
+  <div class="panel"><h2>核心業務規則</h2><div class="kpi-mini"><div>在庫週期<b>${CYCLE_MONTHS}個月</b></div><div>提前預警<b>${REMIND_DAYS}天</b></div><div>領用期間<b>持續計時</b></div><div>退庫<b>沿用原週期</b></div><div>移撥入在庫<b>${transferInStock}具</b></div></div></div>
   <div class="panel"><h2>逾期設備</h2>${over.length?deviceTable(over,true):'<div class="empty">目前沒有逾期設備</div>'}</div>`;
 }
 function showDashboardList(kind){
@@ -842,7 +843,7 @@ function usageRowsTable(r){return r?.length?`<div class="table-wrap"><table styl
 function auditTimeline(r){return r?.length?`<div class="timeline">${r.map(x=>`<div class="timeline-item"><div class="timeline-title">${esc(x.event_type)}　${new Date(x.event_at).toLocaleString("zh-TW")}</div><div class="timeline-meta">單號：${esc(x.document_no||"—")}　操作者：${esc(x.actor_email||"—")}</div><div class="timeline-note">${esc(x.note||"")}</div></div>`).join("")}</div>`:'<div class="empty">尚無稽核紀錄</div>'}
 
 function reportsPage(){
-  const stock=devices.filter(x=>x.state!=="領用中"),over=stock.filter(x=>statusOf(x).label==="逾期"),soon=stock.filter(x=>statusOf(x).label==="即將到期"),issued=devices.filter(x=>x.state==="領用中");
+  const stock=devices.filter(isCurrentLocalStock),over=stock.filter(x=>statusOf(x).label==="逾期"),soon=stock.filter(x=>statusOf(x).label==="即將到期"),issued=devices.filter(x=>x.state==="領用中");
   document.getElementById("content").innerHTML=`<div class="panel"><h2>報表中心</h2><div class="toolbar"><button class="btn" type="button" onclick="report('overdue')">逾期清冊</button><button class="btn secondary" type="button" onclick="report('soon')">30天到期清冊</button><button class="btn secondary" type="button" onclick="report('issued')">領用中清冊</button><button class="btn secondary" type="button" onclick="exportCSV()">設備主檔</button></div><p class="muted">在庫 ${stock.length}；逾期 ${over.length}；30天內到期 ${soon.length}；領用中 ${issued.length}。</p></div>
   <div class="panel"><h2>資料完整性</h2><div class="notice success">所有業務異動均以資料庫交易處理；充電、領用、退庫、送檢及充電完成均保留專用紀錄與 Audit Log。</div></div>`;
 }
