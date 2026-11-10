@@ -327,7 +327,7 @@ function pageTitle(){return({dashboard:"設備生命週期戰情中心",usageDoc
 function go(p){page=p;renderLayout();render();}
 function renderLayout(){
   document.getElementById("app").innerHTML=`<div class="app">
-  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v12.0｜履歷週期・充電・移撥・稽核</small></div>
+  <aside class="sidebar"><div class="brand">SWITCHCARE<br>台電自動線路開關管理系統<small>Enterprise v12.1｜履歷週期・充電・移撥・稽核</small></div>
   <nav class="nav">${nav("dashboard","儀表板")}${nav("switches","開關設備主檔")}${nav("charging","充電與週期管理")}${nav("usage","領用／退庫管理")}${nav("lifecycle","履歷週期")}${nav("inspection","檢修管理")}${nav("exceptions","異常與風險中心")}${nav("documents","移撥單／文件管理")}${nav("usageDocs","發料／收料文件管理")}${nav("reports","報表與稽核")}${nav("settings","系統設定")}</nav></aside>
   <main class="main"><div class="topbar"><div><h1>${pageTitle()}</h1><span class="muted">在庫與領用均持續計時｜退庫沿用原週期｜履歷／檢修／稽核</span></div>
   <div style="display:flex;align-items:center;gap:10px">${page!=="settings"?`<button class="btn" type="button" onclick="openDevice()">＋ 新增開關</button>`:""}<span class="userbar">${esc(session?.user?.email||"")}</span><button class="btn secondary small" type="button" onclick="signOut()">登出</button></div></div><div id="content"></div></main></div>`;
@@ -709,7 +709,7 @@ function openUsage(mode,ids){
   document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>${mode==="issue"?"領用／出庫":"退庫／重新入庫"}</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
   <div class="form-grid"><div class="full"><label>設備</label><select id="uid">${list.map(x=>`<option value="${x.id}">${esc(x.taipower_no)}｜${esc(x.material_no)}｜${esc(x.type)}</option>`).join("")}</select></div>
   <div><label>日期 *</label><input id="ud" type="date" value="${today()}"></div><div><label>${mode==="issue"?"發料單號":"收料單號"}</label><input id="un" placeholder="${mode==="issue"?"ERP／發料單號":"ERP／收料單號"}"></div>
-  <div class="full"><label>領用對象／單位（選填）</label><input id="recipientUnit" placeholder="例如：本處檢修課、○○承攬商"></div>
+  <div class="full"><label>${mode==="issue"?"領用對象／單位（選填）":"退回單位／來源（選填）"}</label><input id="recipientUnit" placeholder="${mode==="issue"?"例如：本處檢修課、○○承攬商":"例如：○○承攬商、工作班"}"></div>
   <div class="full"><label>領用備註</label><textarea id="unote"></textarea></div></div><div class="notice">${mode==="issue"?"本處其他課或承攬商領用；所有權仍屬本處，充電週期依原日期持續計算。":"退庫後沿用原充電週期；下次充電日仍依原週期計算，不因退庫而延後。"}</div>
   <div id="usageMsg" class="notice danger" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" type="button" onclick="saveUsage('${mode}')">確認</button></div></div></div>`);
 }
