@@ -708,13 +708,14 @@ function openUsage(mode,ids){
   const list=ids.map(id=>devices.find(x=>x.id===id)).filter(Boolean);
   document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h2>${mode==="issue"?"領用／出庫":"退庫／重新入庫"}</h2><button class="close" type="button" onclick="closeModal()">×</button></div>
   <div class="form-grid"><div class="full"><label>設備</label><select id="uid">${list.map(x=>`<option value="${x.id}">${esc(x.taipower_no)}｜${esc(x.material_no)}｜${esc(x.type)}</option>`).join("")}</select></div>
-  <div><label>日期 *</label><input id="ud" type="date" value="${today()}"></div><div><label>${mode==="issue"?"發料單號":"收料單號"}</label><input id="un" placeholder="${mode==="issue"?"ERP／發料單號":"ERP／收料單號"}"></div>
+  <div><label>日期 *</label><input id="ud" type="date" value="${today()}"></div><div><label>${mode==="issue"?"發料單號 *":"收料單號 *"}</label><input id="un" placeholder="${mode==="issue"?"ERP／發料單號":"ERP／收料單號"}"></div>
   <div class="full"><label>${mode==="issue"?"領用對象／單位（選填）":"退回單位／來源（選填）"}</label><input id="recipientUnit" placeholder="${mode==="issue"?"例如：本處檢修課、○○承攬商":"例如：○○承攬商、工作班"}"></div>
   <div class="full"><label>領用備註</label><textarea id="unote"></textarea></div></div><div class="notice">${mode==="issue"?"本處其他課或承攬商領用；所有權仍屬本處，充電週期依原日期持續計算。":"退庫後沿用原充電週期；下次充電日仍依原週期計算，不因退庫而延後。"}</div>
   <div id="usageMsg" class="notice danger" style="display:none"></div><div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">取消</button><button class="btn" type="button" onclick="saveUsage('${mode}')">確認</button></div></div></div>`);
 }
 async function saveUsage(mode){
  const id=document.getElementById("uid").value,date=document.getElementById("ud").value,no=document.getElementById("un").value.trim(),note=document.getElementById("unote").value.trim(),recipient=document.getElementById("recipientUnit")?.value.trim()||"";
+ if(!no){const m=document.getElementById("usageMsg");if(m){m.textContent=mode==="issue"?"請輸入發料單號。":"請輸入收料單號。";m.style.display="block";}return;}
  try{
   // 領用對象僅記錄本處內部領用（其他課／包商），不代表設備所有權移轉。
   const fn=mode==="issue"?"issue_switch":"return_switch";
