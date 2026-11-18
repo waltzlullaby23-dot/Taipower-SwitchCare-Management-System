@@ -407,12 +407,22 @@ function showDashboardList(kind){
   if(kind==="stock"){list=list.filter(isCurrentLocalStock);title="目前在庫設備（含移撥入本處）";}
   else if(kind==="issued"){list=list.filter(x=>x.state==="領用中");title="領用中設備";}
   else if(kind==="transferOut"){list=list.filter(x=>x.state==="移撥出");title="移撥出設備（所有權已移轉）";}
-  else if(kind==="transferIn"){list=list.filter(x=>x.transfer_direction==="移撥入"&&!["移撥出","報廢","遺失"].includes(x.state));title="移撥入設備（本處接收）";}
+  else if(kind==="transferIn"){list=list.filter(x=>x.transfer_direction==="移撥入"&&![ "移撥出","報廢","遺失"].includes(x.state));title="移撥入設備（本處接收）";}
   else if(kind==="soon"){list=list.filter(x=>chargeTimingOf(x)?.label==="即將到期");title="30天內到期設備";}
   else if(kind==="overdue"){list=list.filter(x=>chargeTimingOf(x)?.label==="逾期");title="逾期設備";}
   else if(kind==="process"){list=list.filter(x=>["送檢充電","充電中"].includes(x.state));title="送檢／充電設備";}
   else if(kind==="high"){list=list.filter(x=>riskOf(x).label==="高").sort((a,b)=>String(currentNextCharge(a)||"").localeCompare(String(currentNextCharge(b)||"")));title="逾期高風險設備";}
-  document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box" style="max-width:1200px"><div class="modal-head"><h2>${esc(title)}（${list.length}）</h2><button class="close" type="button" onclick="closeModal()">×</button></div>${list.length?`<div class="table-wrap"><table><thead><tr><th>料號</th><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>充電風險</th><th>操作</th></tr></thead><tbody>${list.map(x=>{const s=statusOf(x),r=riskOf(x);return`<tr><td>${esc(x.material_no)}</td><td><b>${esc(x.taipower_no)}</b></td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(currentCycleStart(x))}</td><td>${fmt(currentNextCharge(x))}</td><td><span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="closeModal();detail('${x.id}')">查看</button></td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">目前沒有符合條件的設備。</div>'}<div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">關閉</button></div></div></div>`);
+  document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal"><div class="modal-box dashboard-list-modal" style="max-width:1200px"><div class="modal-head"><h2>${esc(title)}（${list.length}）</h2><button class="close" type="button" onclick="closeModal()">×</button></div>${list.length?`<div class="modal-hscroll-top" id="dashboardListTopScroll" aria-label="表格水平捲動"><div class="modal-hscroll-inner" id="dashboardListTopScrollInner"></div></div><div class="table-wrap modal-table-wrap" id="dashboardListTableScroll"><table><thead><tr><th>料號</th><th>台電編號</th><th>型式</th><th>評價</th><th>狀態</th><th>週期起算</th><th>下次充電</th><th>充電風險</th><th>操作</th></tr></thead><tbody>${list.map(x=>{const s=statusOf(x),r=riskOf(x);return`<tr><td>${esc(x.material_no)}</td><td><b>${esc(x.taipower_no)}</b></td><td>${esc(x.type)}</td><td>${esc(x.rating_type)}</td><td><span class="badge ${s.cls}">${s.label}</span></td><td>${fmt(currentCycleStart(x))}</td><td>${fmt(currentNextCharge(x))}</td><td><span class="badge ${r.cls}">${r.label}</span></td><td><button class="btn small secondary" type="button" onclick="closeModal();detail('${x.id}')">查看</button></td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">目前沒有符合條件的設備。</div>'}<div class="page-actions"><button class="btn secondary" type="button" onclick="closeModal()">關閉</button></div></div></div>`);
+  if(list.length)bindSyncedHorizontalScroll("dashboardListTopScroll","dashboardListTableScroll","dashboardListTopScrollInner");
+}
+function bindSyncedHorizontalScroll(topId,bottomId,innerId){
+  const top=document.getElementById(topId),bottom=document.getElementById(bottomId),inner=document.getElementById(innerId);
+  const table=bottom?.querySelector("table");
+  if(!top||!bottom||!inner||!table)return;
+  inner.style.width=table.scrollWidth+"px";
+  let syncing=false;
+  top.addEventListener("scroll",()=>{if(syncing)return;syncing=true;bottom.scrollLeft=top.scrollLeft;syncing=false;});
+  bottom.addEventListener("scroll",()=>{if(syncing)return;syncing=true;top.scrollLeft=bottom.scrollLeft;syncing=false;});
 }
 function isCurrentLocalStock(x){
   return x.state==="在庫" && (!x.ownership_unit || x.ownership_unit==="本處");
